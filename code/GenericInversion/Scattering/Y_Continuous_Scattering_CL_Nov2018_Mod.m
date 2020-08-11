@@ -1,0 +1,50 @@
+function [Y] = Y_Continuous_Scattering_CL_Nov2018_Mod(x2,k1,k3,omega,U,c,delta,N_bl,I)
+%The x2 dependent part, i.e. just phid. Direct fork of the preceding.
+
+% I = 1 for UHP, -1 for LHP.
+
+Y.phi = zeros(numel(x2),numel(k1));
+Y.dphi = zeros(numel(x2),numel(k1));
+Y.p = zeros(numel(x2),numel(k1));
+Y.v = zeros(numel(x2),numel(k1));
+
+N_y = numel(x2);
+N_ybl = numel(x2(x2<delta));
+
+% Going to brute-loop the decaying solution within the boundary layer
+%N_bl = 1000;
+h1 = waitbar(0,'Computing x2 dependence');
+for j = 1:N_ybl
+    y = x2(j);
+    z.f = @(s) y + ((delta-y)/2)*(1+ exp(I*1i*pi*s)) ;
+    z.df = @(s) ((delta-y)/2)*I*1i*pi*exp(I*1i*pi*s);
+    [dec] = Comp_Dec_Aug18A_skip(k1,k3,omega,U,c,delta,N_bl,z) ;
+    Y.phi(j,:) = dec.phi;
+    Y.dphi(j,:) = dec.dphi;
+    Y.p(j,:) = dec.p;
+    Y.v(j,:) = dec.v;
+    waitbar(j./N_ybl,h1,'Computing x2 dependence');
+end
+close(h1);
+
+Y.phi(abs(Y.phi) < 5*eps) = 0;
+Y.dphi(abs(Y.dphi) < 5*eps) = 0;
+Y.p(abs(Y.p) < 5*eps) = 0;
+Y.v(abs(Y.v) < 5*eps) = 0;
+
+
+% Outwith the boundary-layer: "known" results
+%disp('Computing auxiliary functions outside the boundary-layer');
+gammainf = Gamma_FF(k3,omega,c.f(delta),U.f(delta));
+G_inf = gammainf(k1);
+C_inf = 1i*(omega - U.f(delta)*k1);
+%dC_inf = -1i*U.df(delta)*k1;
+
+Y.phi(x2 >= delta,:) = exp(-x2(x2>=delta).'*G_inf);
+Y.dphi(x2 >= delta,:) = -G_inf.*exp(-x2(x2>=delta).'*G_inf);
+Y.p(x2 >= delta,:) = -C_inf.^3.*Y.phi(x2 >= delta,:);
+Y.v(x2 >= delta,:) = -C_inf.^2.*Y.dphi(x2 >= delta,:);
+
+
+end
+

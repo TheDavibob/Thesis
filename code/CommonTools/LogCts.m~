@@ -1,0 +1,10 @@
+function [log] = LogCts(t,C,dC)
+%LogCts Provides a logarithm function continuous on the contour z=C(t),
+%with 1=C(0). Simply integrates from 1, thus branch independent. Buggered
+%if the contour passes through 0. If contour is closed get winding numbers,
+%etc.
+
+f=@(eta) dC(eta)./C(eta);
+log=integral(f,0,t);
+
+end
