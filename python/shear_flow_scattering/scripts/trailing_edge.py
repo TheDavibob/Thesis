@@ -354,9 +354,7 @@ def distributed_trailing_edge(Up=None, Um=None, cp=None, cm=None, deltap=1.0, de
 
     ``weighting`` is ``"thesis"`` (eq. 6.3.10, as the MATLAB) or
     ``"jacobian"`` (the literal ``y2 -> kappa1`` change of variables); see
-    :func:`..distributed.distribution_weight`.  Note ``"jacobian"`` with the
-    default ``omega_c = 1`` is log-divergent at the edge of a parabolic
-    boundary layer.
+    :func:`..distributed.distribution_weight`.
 
     .. warning:: **Bug fixed.**  The critical-layer start was
        ``min(omega/Up.f(deltap), omega/Up.f(deltap))`` -- ``Up`` twice; the
@@ -398,9 +396,8 @@ def rerun_with_vorticity(state: Struct, omega_c, weighting="thesis") -> Struct:
     """
     st = state
     omega_c = row(omega_c)
-    if weighting == "jacobian":
-        _check_jacobian_integrable(st, omega_c)
     g = distribution_weight(st.omega, st.Up, st.cp, st.y2, weighting)
+    _check_edge_resolution(st, g * omega_c * st.dkappa1 * st.I0, weighting)
     I_up = upstream_distributed_integrated(st.x1, omega_c, st.G_01, st.dkappa1, weighting)
     # thesis weighting: Int = -omega c^2 I0 omega_c / (Km U^2), as the MATLAB
     Int = -g * st.I0 * omega_c / st.Km_distributed
@@ -411,27 +408,22 @@ def rerun_with_vorticity(state: Struct, omega_c, weighting="thesis") -> Struct:
     return res
 
 
-def _check_jacobian_integrable(st, omega_c):
-    """Warn if the ``"jacobian"`` source integral looks divergent.
+def _check_edge_resolution(st, contrib, weighting):
+    """Warn if the source node nearest the boundary-layer edge carries more
+    than 10% of the (wall-pressure-weighted) source strength.
 
-    In ``y2`` the integrand is ``c0^2 omega_c / U'``, so where ``U'(delta) = 0``
-    it is integrable only if ``omega_c = O(delta - y2)``.  Heuristic: flag it
-    when the node nearest the edge carries more than 10% of the total |weight|
-    (at N = 80: ``omega_c = 1`` ~29%, ``y2 (1 - y2)`` ~7%, ``(1 - y2)^2`` ~0.2%).
-    On coarse grids this also flags under-resolution: the ``kappa1``
-    quadrature clusters near the wall (6 nodes reach only ``y2 ~ 0.68``).
+    The ``kappa1`` quadrature clusters near the wall (6 nodes reach only
+    ``y2 ~ 0.68``, 80 nodes ``y2 ~ 0.97``), so a large edge share means the
+    outer part of the distribution is under-resolved: increase
+    ``N_distribution``.
     """
-    if abs(st.Up.df(st.deltap)) > 1e-8 * abs(st.Up.df(0)):
-        return
-    g = distribution_weight(st.omega, st.Up, st.cp, st.y2, "jacobian")
-    contrib = np.abs(g * omega_c * st.dkappa1)
-    if contrib[np.argmax(st.y2)] > 0.1 * contrib.sum():
-        log.warning("weighting='jacobian': the outermost source node carries >10% of the "
-                    "source weight. Either omega_c does not vanish at y2 = delta, where "
-                    "U' = 0 (then the integral is log-divergent and grows with "
-                    "N_distribution; omega_c must vanish at least linearly there), or "
-                    "N_distribution is too small to resolve the edge (the kappa1 "
-                    "quadrature clusters near the wall).")
+    contrib = np.abs(contrib)
+    frac = contrib[np.argmax(st.y2)] / contrib.sum()
+    if frac > 0.1:
+        log.warning("weighting=%r: the outermost source node carries %.0f%% of the source "
+                    "strength; the outer boundary layer is under-resolved -- increase "
+                    "N_distribution.", weighting, 100 * frac)
+    return frac
 
 
 # ---------------------------------------------------------------------------

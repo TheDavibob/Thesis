@@ -115,9 +115,15 @@ def test_distributed_weighting_toggle(caplog):
     jac = trailing_edge.rerun_with_vorticity(r.state, oc, weighting="jacobian")
     _finite(jac.I_total, (X1.size, x2.size))
     assert not np.allclose(th.I_total.p, jac.I_total.p)
-    # omega_c = 1 does not vanish where U'(delta) = 0 -> warned
-    trailing_edge.rerun_with_vorticity(r.state, np.ones(r.y2.size), weighting="jacobian")
-    assert "log-divergent" in caplog.text
+    # edge-resolution heuristic: quiet when the outer nodes contribute little,
+    # warns when the outermost node dominates
+    from shear_flow_scattering._utils import Struct
+    st = Struct(y2=np.array([0.1, 0.5, 0.9]))
+    caplog.clear()
+    assert trailing_edge._check_edge_resolution(st, np.array([1.0, 1.0, 0.01]), "jacobian") < 0.1
+    assert "under-resolved" not in caplog.text
+    assert trailing_edge._check_edge_resolution(st, np.array([1.0, 1.0, 5.0]), "jacobian") > 0.1
+    assert "under-resolved" in caplog.text
     with pytest.raises(ValueError):
         trailing_edge.rerun_with_vorticity(r.state, oc, weighting="nonsense")
 

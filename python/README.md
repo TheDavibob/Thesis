@@ -209,6 +209,40 @@ Each fix is also flagged in the relevant docstring.
 * **`Scrappy_Greens` with `I = 0`** (its default) integrates straight through
   the critical point `U(x2) = omega/kappa1` and is singular there.
 
+* **Single-sheet incident field (all `Y_Greens*` at `k1 = kappa1`).** These
+  evaluate `phi` *at* the sheet `y2`, which is the critical level for
+  `kappa1 = omega/U(y2)`, where `phi ~ C^-3` is infinite. The result is a
+  resolution-dependent number that grows like `N_bl^3` and is absorbed into
+  `Q0 = 1e-10`. The paths above and below the sheet have lengths `delta - y2`
+  and `y2`, so the incident pressure jumps across the sheet by about
+  `((delta - y2)/y2)^3`: a factor of about 700 at `y2 = 0.1`, the default of
+  `HardSoft_Continuous`, and 3.4 at `y2 = 0.4` (`HardSoftHard`). It is only
+  consistent at `y2 = delta/2`, as in Fig. 6.2.2. The scattered field is
+  consistent with the wall value, so only the incident part above the sheet is
+  affected. The regular form uses one-sided limits `p = lim(-C^3 phi)`, as
+  `Distributed_WallPressure` does with `shift_y2`. Not yet changed in the port.
+* **Critical-layer branch for `D(kappa1)`.** At `kappa1 = omega/U(y2)`, the
+  dispersion function needs `phi_d` continued through the source's own
+  critical level, and the two ways round give complex conjugates. Causality
+  (`Im omega < 0` at real `kappa1`) selects the upper-half-plane path
+  (`HP = +1`); `D(kappa1 + i eta)` converges to it. `Distributed_TrailingEdge`
+  uses `+1`, but `WallPressure_PointSource_Scaled` (Fig. 6.4.2) and
+  `FarField_TrailingEdge_Lined` use `-1`. The moduli agree, so `|p_w|` is
+  unaffected; the phases are conjugated.
+
+## Distributed sources: the `weighting` toggle
+
+`distributed_trailing_edge`, `rerun_with_vorticity` and
+`upstream_distributed_integrated` take `weighting="thesis"` (the default:
+eq. 6.3.10 and the MATLAB) or `"jacobian"` (the literal `y2 -> kappa1` change
+of variables). The two differ by `(dy2/dkappa1)^2`: (6.3.10) applies the
+Jacobian upside down, which weights near-wall vorticity up by about
+`(omega U'/U^2)^2`, roughly 240 at the wall for the default profile. Both
+weightings converge in `N_distribution`. The `"jacobian"` weight grows like
+`1/U'^2` towards the edge, but the unit-source wall pressure `I0` vanishes
+there like `(delta - y2)^4`. `examples/fig_weighting_comparison.py` plots
+the two side by side.
+
 ## Other differences from MATLAB behaviour
 
 * **Points exactly on a branch cut.** NumPy honours signed zeros

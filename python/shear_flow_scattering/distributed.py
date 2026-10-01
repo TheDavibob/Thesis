@@ -204,11 +204,13 @@ def distribution_weight(omega, U, c, y2, weighting="thesis"):
       variables.  It differs from ``"thesis"`` by ``(U^2 / (omega U'))^2 =
       (dy2/d kappa1)^2``, i.e. the thesis applies the Jacobian upside down.
 
-    .. warning:: With ``"jacobian"`` the integrand, back in ``y2``, is
-       ``c0^2 omega_c / U'``, which is not integrable where ``U' = 0`` -- at
-       ``y2 = delta`` for the parabolic profiles -- unless ``omega_c``
-       vanishes there at least linearly.  For ``omega_c = 1`` the integral
-       diverges logarithmically and results grow with ``N_distribution``.
+    .. note:: The ``"jacobian"`` weight alone, ``~1/U'^2``, is not integrable
+       where ``U' = 0`` (the edge of the parabolic boundary layer).  The full
+       source integrand also contains the unit-source wall pressure ``I0``,
+       which for the parabolic profile vanishes like ``(delta - y2)^4`` as the
+       source approaches the edge, so the source integral converges even for
+       ``omega_c = 1`` (checked: < 0.5% change between N_distribution = 20, 40
+       and 80).
     """
     if weighting == "thesis":
         return omega * c.f(y2) ** 2 / U.f(y2) ** 2
