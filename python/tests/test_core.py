@@ -294,3 +294,52 @@ def test_jacobian_weighting_equals_y2_integral():
     yy, wy = q.lgwt(400, 0, 1)
     rhs = np.sum(25 * oc(yy) / U.df(yy) * wy)
     assert np.isclose(abs(lhs), abs(rhs), rtol=1e-4)
+
+
+# --------------------------------------------------------------------------- regularised Green's function
+def _hard_ops(om, U):
+    C0 = lambda k: 1j * (om - U.f(0) * k)
+    dC0 = lambda k: -1j * U.df(0) * k
+    return (lambda k: -C0(k) ** 2), (lambda k: -3 * C0(k) * dC0(k)), C0
+
+
+def test_convected_greens_matches_causal_limit():
+    """The regular form equals lim_{eta -> 0+} of the unregularised formula at
+    kappa1 + i eta (finite there; straight paths are legitimate)."""
+    from shear_flow_scattering.inversion import y_greens_convected
+    from shear_flow_scattering.pridmore_brown import comp_generic_aug18a_skip as gen
+    U, c, om, d = profiles.u_parabolic(0.3, 1, 1), profiles.c_const(5), 1.0, 1.0
+    l1, l2, C0 = _hard_ops(om, U)
+    C = lambda x, k: 1j * (om - U.f(x) * k)
+    y2, x2 = 0.4, np.array([0.0, 0.15, 0.6, 0.9])
+    kap = om / U.f(y2)
+    ref = y_greens_convected(x2, y2, kap, 0.0, om, U, c, l1, l2, d, 2000).p
+    errs = []
+    for eta in (1e-2, 1e-3):
+        k = np.atleast_1d(kap + 1j * eta)
+        N = 20000
+        s0 = comp_dec_aug18a_skip(k, 0.0, om, U, c, d, N, contours.straight_path(d, 0.0))
+        D = (l1(k) * s0.dphi + l2(k) * s0.phi)[0]
+        phl = lambda x: gen(k, 0.0, om, U, c, l1, l2, N, contours.straight_path(0.0, x)).phi[0]
+        phd = lambda x: comp_dec_aug18a_skip(k, 0.0, om, U, c, d, N, contours.straight_path(d, x)).phi[0]
+        g = [-C(y2, k)[0] ** 3 * (phl(y2) * phd(xx) if xx > y2 else phd(y2) * phl(xx)) for xx in x2]
+        pg = np.array([-C(xx, k)[0] ** 3 * gi for xx, gi in zip(x2, g)]) / (c.f(0) ** 2 * C0(k)[0] ** 4 * D)
+        errs.append(np.max(np.abs(pg - ref)) / np.max(np.abs(ref)))
+    assert errs[1] < 0.02 and errs[1] < errs[0] / 5  # converging linearly in eta
+
+
+@pytest.mark.parametrize("y2", [0.1, 0.4])
+def test_convected_greens_continuous_and_resolution_independent(y2):
+    from shear_flow_scattering.inversion import y_greens_convected
+    U, c, om = profiles.u_parabolic(0.3, 1, 1), profiles.c_const(5), 1.0
+    l1, l2, _ = _hard_ops(om, U)
+    x = np.array([y2 - 0.01, y2 + 0.01])
+    a = y_greens_convected(x, y2, om / U.f(y2), 0.0, om, U, c, l1, l2, 1.0, 1000)
+    b = y_greens_convected(x, y2, om / U.f(y2), 0.0, om, U, c, l1, l2, 1.0, 4000)
+    assert np.isclose(a.p[0], a.p[1], rtol=1e-3)   # original jumps ~((1-y2)/y2)^3
+    assert np.isclose(a.p0, b.p0, rtol=1e-6)        # original grows like N^3
+    # the anti-causal branch is the complex conjugate (real-coefficient problem)
+    m = y_greens_convected(x, y2, om / U.f(y2), 0.0, om, U, c, l1, l2, 1.0, 1000, HP=-1)
+    assert np.isclose(m.D, np.conj(a.D), rtol=1e-8)
+    with pytest.raises(ValueError):
+        y_greens_convected(x, y2, om / U.f(y2), 0.0, om, U, c, l1, l2, 1.0, 1000, HP=0)

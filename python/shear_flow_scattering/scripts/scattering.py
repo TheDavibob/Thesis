@@ -16,8 +16,13 @@ relations) is factorised numerically, and the scattered field is inverted
 along the hyperbolic contours (acoustic part), round the critical layer, and
 -- where instability modes exist -- via residues.
 
-``Q0 = 1e-10`` is an arbitrary amplitude ("depends on y2 in a variety of
-reasonably subtle ways, but scales out").
+Incident field: every script takes ``incident="regularised"`` (default; a
+unit sheet via :func:`..inversion.y_greens_convected` -- finite, resolution
+independent, continuous across the sheet, causal branch) or ``"original"``
+(the MATLAB construction, with the arbitrary amplitude ``Q0 = 1e-10``, which
+"scales out" only because ``phi`` is evaluated at its own critical level and
+grows like ``N_bl^3``).  Use ``"original"`` to reproduce the thesis figures;
+see :func:`.common.incident_sheet`.
 """
 from __future__ import annotations
 
@@ -26,8 +31,7 @@ import numpy as np
 from .._utils import FIELDS, Struct, log, row
 from ..contours import contour_semicircle, straight_path, tanh_contour
 from ..factorisation import fact_mult_cont_scaled_finite
-from ..inversion import (dispersion_generic_nov2018, fourier_nov2018, y_continuous_scattering,
-                         y_greens_generic, y_greens_hard)
+from ..inversion import dispersion_generic_nov2018, fourier_nov2018, y_continuous_scattering
 from ..kernels import (ff_kernel_hardsoft_noslip, ff_kernel_hardsoft_slip, ff_kernel_impedance,
                        impedance_up_down, kernel_generic, kernel_hardsoft)
 from ..pridmore_brown import comp_dec_aug18a_skip
@@ -35,7 +39,7 @@ from ..profiles import c_const, u_parabolic
 from ..steepest_descent import far_field_saddle
 from ..zeros import newton_raphson
 from .common import (acoustic_and_cl, add_fields, blend_far_field, cl_contours, far_field,
-                     sd_contours, upstream_field, wall_operators)
+                     incident_sheet, sd_contours, wall_operators)
 
 
 # ---------------------------------------------------------------------------
@@ -64,12 +68,15 @@ def _dec(k, k3, omega, U, c, delta, N_bl, HP=0):
     return comp_dec_aug18a_skip(k, k3, omega, U, c, delta, N_bl, z)
 
 
-def _upstream_hard(x1, x2, y2, kappa1, k3, omega, U, c, delta, N_bly, Q0):
-    """Incident field and wall pressure from the hard-wall Green's function
-    (critical layer deformed into the LHP "to preserve causality")."""
-    Y_up = y_greens_hard(x2, y2, kappa1, k3, omega, U, c, delta, N_bly, -1)
-    wall = y_greens_hard(0, y2, kappa1, k3, omega, U, c, delta, N_bly, -1)
-    return upstream_field(x1, Y_up, kappa1, Q0), Q0 * wall.p[0, 0]
+def _upstream_hard(x1, x2, y2, kappa1, k3, omega, U, c, delta, N_bl, N_orig, Q0, incident):
+    """Incident field and wall pressure over a hard wall (see
+    :func:`.common.incident_sheet`; ``N_orig`` is the step count the
+    original used, ``10 N_bl`` in the full-field scripts)."""
+    L = wall_operators(omega, U).hard
+    N = N_bl if incident == "regularised" else N_orig
+    I, wall = incident_sheet(x1, x2, y2, kappa1, k3, omega, U, c, delta, N, L, incident, Q0,
+                             hard=True)
+    return I, wall.p
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +85,7 @@ def _upstream_hard(x1, x2, y2, kappa1, k3, omega, U, c, delta, N_bly, Q0):
 def hard_soft_continuous(U=None, c=None, delta=1.0, omega=20.0, k3=0.0, N_bl=1000, y2=0.1,
                          x1=None, x2=None, N_C=1000, angle=3 * np.pi / 8, curvature=0.01,
                          apex=None, shift1=0.5, shift2=0.5, Q0=1e-10, prec_N=2000,
-                         branch_cut=np.pi / 2):
+                         branch_cut=np.pi / 2, incident="regularised"):
     """``HardSoft_Continuous_Nov2018.m`` -- hard wall (``x1 < 0``) to pressure
     release (``x1 > 0``), slipping or not.
 
@@ -95,7 +102,8 @@ def hard_soft_continuous(U=None, c=None, delta=1.0, omega=20.0, k3=0.0, N_bl=100
 
     Cp, Cm = sd_contours(N_C, omega, U.f(delta), c.f(delta), k3, apex, curvature, angle)
     C_CLp, C_CLm = cl_contours(N_C, omega, U.f(delta), U.f(0), shift1, shift2)
-    I_upstream, P_up = _upstream_hard(x1, x2, y2, kappa1, k3, omega, U, c, delta, 10 * N_bl, Q0)
+    I_upstream, P_up = _upstream_hard(x1, x2, y2, kappa1, k3, omega, U, c, delta, N_bl, 10 * N_bl, Q0,
+                                   incident)
 
     Yp = y_continuous_scattering(x2, Cp.k, k3, omega, U, c, delta, N_bl)
     Ym = y_continuous_scattering(x2, Cm.k, k3, omega, U, c, delta, N_bl)
@@ -123,7 +131,8 @@ def hard_soft_continuous(U=None, c=None, delta=1.0, omega=20.0, k3=0.0, N_bl=100
 
 
 def far_field_hard_soft(U=None, c=None, delta=1.0, omega=1.0, k3=0.0, N_bl=2000, y2=0.5,
-                        N_theta=1000, prec_N=5000, Q0=1e-10, plot=False):
+                        N_theta=1000, prec_N=5000, Q0=1e-10, plot=False,
+                        incident="regularised"):
     """``FarField_HardSoft_Continuous_Nov2018.m`` -- far-field directivity of the
     hard -> soft problem (default: no-slip parabolic profile)."""
     U = U or u_parabolic(0, 1, delta)
@@ -135,8 +144,9 @@ def far_field_hard_soft(U=None, c=None, delta=1.0, omega=1.0, k3=0.0, N_bl=2000,
     shift = 0.5 * (0.5 * (S[0] - S[-1]))
     _, K = _hardsoft_kernel(k3, omega, U, c, delta, N_bl, _contour(shift, 3), prec_N, np.pi)
 
-    wall = y_greens_hard(0, y2, kappa1, k3, omega, U, c, delta, N_bl, -1)
-    A = -1j * Q0 * wall.p[0, 0] / K.m(kappa1)
+    _, P_up = _upstream_hard(None, None, y2, kappa1, k3, omega, U, c, delta, N_bl, N_bl, Q0,
+                             incident)
+    A = -1j * P_up / K.m(kappa1)
     dec = _dec(S, k3, omega, U, c, delta, N_bl)
     pole = 1 / (S - kappa1)
     Kp = A * pole / (K.p(S) * dec.v)
@@ -172,7 +182,7 @@ def _hsh_modes(k3, omega, U, c, delta, N_bl, require_unstable=True):
 def hard_soft_hard(U=None, c=None, delta=1.0, omega=1.0, k3=0.0, N_bl=1000, y2=0.4,
                    x1=None, x2=None, x1_u=-5.0, x1_d=0.0, N_C=1000, angle=np.pi / 4,
                    curvature=0.01, apex=None, N_CL=1000, shift1=None, shift2=None,
-                   Q0=1e-10, prec_N=2000):
+                   Q0=1e-10, prec_N=2000, incident="regularised"):
     """``HardSoftHard_Continuous_Feb2019.m`` -- hard wall, pressure-release
     segment ``[x1_u, x1_d)``, hard wall again.
 
@@ -202,7 +212,8 @@ def hard_soft_hard(U=None, c=None, delta=1.0, omega=1.0, k3=0.0, N_bl=1000, y2=0
     zeds, kappap, dD_l = _hsh_modes(k3, omega, U, c, delta, N_bl)
     dDp_kappap, dDp_zeds = dD_l(kappap), dD_l(zeds)
     log.info("Unstable modes determined, computing upstream behaviour")
-    I_upstream, P_up = _upstream_hard(x1, x2, y2, kappa1, k3, omega, U, c, delta, 10 * N_bl, Q0)
+    I_upstream, P_up = _upstream_hard(x1, x2, y2, kappa1, k3, omega, U, c, delta, N_bl, 10 * N_bl, Q0,
+                                   incident)
 
     log.info("Computing wall-normal behaviour")
     Yp = y_continuous_scattering(x2, Cp.k, k3, omega, U, c, delta, N_bl)
@@ -272,7 +283,8 @@ def hard_soft_hard(U=None, c=None, delta=1.0, omega=1.0, k3=0.0, N_bl=1000, y2=0
 
 
 def far_field_hard_soft_hard(U=None, c=None, delta=1.0, omega=4.0, k3=0.0, N_bl=1000, y2=0.4,
-                             x1_u=-7.5, x1_d=0.0, N_theta=1000, prec_N=5000, Q0=1e-10):
+                             x1_u=-7.5, x1_d=0.0, N_theta=1000, prec_N=5000, Q0=1e-10,
+                             incident="regularised"):
     """``FarField_HardSoftHard_Continuous_Feb2019.m`` -- far field of the
     double junction; also returns each contribution (``FF_s1``, ``FF_s2_1``,
     ``FF_s2_2``).  Without an unstable mode ``kappap`` is set to 0 and its
@@ -287,8 +299,8 @@ def far_field_hard_soft_hard(U=None, c=None, delta=1.0, omega=4.0, k3=0.0, N_bl=
 
     zeds, kappap, dD_l = _hsh_modes(k3, omega, U, c, delta, N_bl, require_unstable=False)
     dDp_kappap = dD_l(kappap)
-    wall = y_greens_hard(0, y2, kappa1, k3, omega, U, c, delta, N_bl, -1)
-    P_up = Q0 * wall.p[0, 0]
+    _, P_up = _upstream_hard(None, None, y2, kappa1, k3, omega, U, c, delta, N_bl, N_bl, Q0,
+                             incident)
     Y = y_continuous_scattering(delta, S, k3, omega, U, c, delta, 10)
     Y = Struct(**{f: Y[f][0] for f in FIELDS})
 
@@ -338,7 +350,8 @@ def _impedance_kernel(Zu, Zd, k3, omega, U, c, delta, N_bl, contour, prec_N):
 def imp_imp_continuous(Zu=1 - 1j, Zd=2 * (1 - 1j), U=None, c=None, delta=1.0, omega=1.0,
                        k3=0.0, N_bl=1000, y2=0.5, x1=None, x2=None, N_C=1000,
                        angle=np.pi / 4, curvature=0.01, apex=None, N_CL=1000,
-                       shift1=None, shift2=None, Q0=1e-10, prec_N=2000):
+                       shift1=None, shift2=None, Q0=1e-10, prec_N=2000,
+                       incident="regularised"):
     """``ImpImp_Continuous_Jan2019.m`` -- junction between two impedance
     linings ``Zu`` (``x1 < 0``) and ``Zd`` (either may be ``inf``)."""
     U = U or u_parabolic(0, 1, delta)
@@ -354,10 +367,10 @@ def imp_imp_continuous(Zu=1 - 1j, Zd=2 * (1 - 1j), U=None, c=None, delta=1.0, om
     C_CLp, C_CLm = cl_contours(N_CL, omega, U.f(delta), U.f(0), shift1, shift2)
     Lu, Ld, K = _impedance_kernel(Zu, Zd, k3, omega, U, c, delta, N_bl, _contour(), prec_N)
 
-    Y_up = y_greens_generic(x2, y2, kappa1, k3, omega, U, c, Lu.l1, Lu.l2, delta, 10 * N_bl, -1)
-    wall = y_greens_generic(0, y2, kappa1, k3, omega, U, c, Lu.l1, Lu.l2, delta, 10 * N_bl, -1)
-    I_upstream = upstream_field(x1, Y_up, kappa1, Q0)
-    incident = Q0 * (Ld.l1(kappa1) * wall.dphi[0, 0] + Ld.l2(kappa1) * wall.phi[0, 0])
+    N_inc = N_bl if incident == "regularised" else 10 * N_bl
+    I_upstream, wall = incident_sheet(x1, x2, y2, kappa1, k3, omega, U, c, delta, N_inc, Lu,
+                                      incident, Q0)
+    forcing = Ld.l1(kappa1) * wall.dphi + Ld.l2(kappa1) * wall.phi
 
     Yp = y_continuous_scattering(x2, Cp.k, k3, omega, U, c, delta, N_bl)
     Ym = y_continuous_scattering(x2, Cm.k, k3, omega, U, c, delta, N_bl)
@@ -371,7 +384,7 @@ def imp_imp_continuous(Zu=1 - 1j, Zd=2 * (1 - 1j), U=None, c=None, delta=1.0, om
     Du_p, Dd_m = D(Lu, Cp.k, 0), D(Ld, Cm.k, 0)
     Dd_CLp, Dd_CLm = D(Ld, C_CLp.k, 1), D(Ld, C_CLm.k, -1)
 
-    A = -1j * incident / K.m(kappa1)
+    A = -1j * forcing / K.m(kappa1)
     pole = lambda k: 1 / (k - kappa1)
     res = acoustic_and_cl(
         x1, Cp, Cm, C_CLp, C_CLm,
@@ -385,7 +398,7 @@ def imp_imp_continuous(Zu=1 - 1j, Zd=2 * (1 - 1j), U=None, c=None, delta=1.0, om
 
 
 def far_field_imp_imp(R, Z=1 - 1j, U=None, c=None, delta=1.0, omega=1.0, k3=0.0, N_bl=1000,
-                      y2=0.5, N_theta=1000, prec_N=5000, Q0=1e-10):
+                      y2=0.5, N_theta=1000, prec_N=5000, Q0=1e-10, incident="regularised"):
     """``FarField_ImpImp_Continuous_Feb2019.m`` -- far field of an impedance
     junction with ``Zu = Z / R`` and ``Zd = R Z``.
 
@@ -405,12 +418,12 @@ def far_field_imp_imp(R, Z=1 - 1j, U=None, c=None, delta=1.0, omega=1.0, k3=0.0,
     shift = 0.5 * (0.5 * (S[0] - S[-1]))
     Lu, Ld, K = _impedance_kernel(Zu, Zd, k3, omega, U, c, delta, N_bl, _contour(shift, 3), prec_N)
 
-    wall = y_greens_generic(0, y2, kappa1, k3, omega, U, c, Lu.l1, Lu.l2, delta, N_bl, -1)
-    incident = Q0 * (Ld.l1(kappa1) * wall.dphi[0, 0] + Ld.l2(kappa1) * wall.phi[0, 0])
+    _, wall = incident_sheet(None, None, y2, kappa1, k3, omega, U, c, delta, N_bl, Lu, incident, Q0)
+    forcing = Ld.l1(kappa1) * wall.dphi + Ld.l2(kappa1) * wall.phi
     dec = _dec(S, k3, omega, U, c, delta, N_bl)
     Du = Lu.l1(S) * dec.dphi + Lu.l2(S) * dec.phi
     Dd = Ld.l1(S) * dec.dphi + Ld.l2(S) * dec.phi
-    A = -incident / (1j * K.m(kappa1))
+    A = -forcing / (1j * K.m(kappa1))
     C1 = 1 / (S - kappa1)
     FF = blend_far_field(far_field(A * C1 / (K.p(S) * Du), sd.Theta, Y),
                          far_field(A * C1 * K.m(S) / Dd, sd.Theta, Y), theta < np.pi / 2)

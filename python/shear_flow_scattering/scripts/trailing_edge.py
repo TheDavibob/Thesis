@@ -34,7 +34,7 @@ from ..kernels import ff_wake_kernel, wake_kernel
 from ..profiles import c_const, u_linear, u_parabolic, u_pw_parabolic
 from ..steepest_descent import far_field_saddle
 from ..zeros import newton_raphson
-from .common import cl_contours, sd_contours
+from .common import cl_contours, incident_sheet, sd_contours, wall_operators
 
 
 # ---------------------------------------------------------------------------
@@ -216,9 +216,14 @@ def trailing_edge_lined(Up=None, Um=None, cp=None, cm=None, deltap=1.0, deltam=1
                         omega=5.0, Z=2 - 2j, k3=0.0, y2=0.5, x1=None, x2=None, N_bl=2000,
                         N_C=500, angle=np.pi / 4, curvature=0.01, apex=None, N_CL=1000,
                         shift1=None, shift2=None, Q0=1e-10, prec_N=2000,
-                        branch_cut=3 * np.pi / 2, mode_guess=0.9 + 0.35j):
+                        branch_cut=3 * np.pi / 2, mode_guess=0.9 + 0.35j,
+                        incident="regularised"):
     """``TrailingEdge_Lined.m`` -- vortex sheet at ``y2`` above a lined plate
     ending at ``x1 = 0`` (asymmetric linear profiles by default).
+
+    ``incident`` is ``"regularised"`` (default) or ``"original"`` (the MATLAB
+    construction with arbitrary ``Q0``; use it to reproduce the thesis
+    figures).  See :func:`.common.incident_sheet`.
 
     Returns ``I_total`` (full field on the ``x1 x x2`` grid) together with
     its acoustic, critical-layer, modal and incident parts.  (Very expensive
@@ -241,11 +246,10 @@ def trailing_edge_lined(Up=None, Um=None, cp=None, cm=None, deltap=1.0, deltam=1
     log.info("Computing upstream behaviour")
     xa = st.x2[st.above]
     L1 = ops.L1
-    Y_up = y_greens_generic(xa, y2, kappa1, k3, omega, Up, cp, L1.l1, L1.l2, deltap, 10 * N_bl, -1)
-    wall = y_greens_generic(0, y2, kappa1, k3, omega, Up, cp, L1.l1, L1.l2, deltap, 10 * N_bl, -1)
-    Xu = np.exp(-1j * st.x1 * kappa1)
-    I_up = Struct(**{f: Q0 * np.outer(Xu, Y_up[f][:, 0]) for f in FIELDS})
-    at_wall = lambda L: Q0 * (L.l1(kappa1) * wall.dphi[0, 0] + L.l2(kappa1) * wall.phi[0, 0])
+    N_inc = N_bl if incident == "regularised" else 10 * N_bl
+    I_up, wall = incident_sheet(st.x1, xa, y2, kappa1, k3, omega, Up, cp, deltap, N_inc, L1,
+                                incident, Q0)
+    at_wall = lambda L: L.l1(kappa1) * wall.dphi + L.l2(kappa1) * wall.phi
     I0 = at_wall(ops.P) if Z != 0 else at_wall(ops.V1)
 
     A, A_up = _leading(I0, st.K.m(kappa1), Z, ops.Zed)
@@ -259,7 +263,7 @@ def far_field_trailing_edge_lined(U0=0.3, Uinfp=1.0, Uinfm=1.0, deltap=1.0, delt
                                   N_theta_p=300, N_theta_m=300, prec_N=10000, scale=1.0,
                                   branch_cut=3 * np.pi / 2, shift_y2=0.001, Up=None, Um=None,
                                   cp=None, cm=None, theta1=None, theta2=None, kappa1=None,
-                                  pressure_upstream=None):
+                                  pressure_upstream=None, incident="regularised"):
     """``FarField_TrailingEdge_Lined.m`` -- far-field directivity of the
     trailing-edge problem ("Only really optimised for hard-wall").
 
@@ -270,7 +274,9 @@ def far_field_trailing_edge_lined(U0=0.3, Uinfp=1.0, Uinfm=1.0, deltap=1.0, delt
 
     ``kappa1`` may be an array (one forcing wavenumber per source height, as in
     ``WallPressure_PointSource_FarField.m``); results then gain a trailing
-    axis.  ``pressure_upstream`` overrides the computed wall-pressure forcing.
+    axis.  ``pressure_upstream`` overrides the computed wall-pressure forcing,
+    otherwise :func:`vortex_wall_pressure` (``incident`` selects regularised or
+    original).
     """
     Up = Up or u_parabolic(U0, Uinfp, deltap)
     Um = Um or u_parabolic(U0, Uinfm, deltam)
@@ -292,9 +298,8 @@ def far_field_trailing_edge_lined(U0=0.3, Uinfp=1.0, Uinfm=1.0, deltap=1.0, delt
     Km_kappa1 = K.m(kappa1)
 
     if pressure_upstream is None:
-        wp = distributed_wall_pressure(y2, omega / Up.f(y2), shift_y2, omega, k3, Up, cp, deltap,
-                                       N_bl, ops.L1.l1, ops.L1.l2, -1)
-        pressure_upstream = -q0 * wp * cp.f(y2) ** 2 / Up.df(y2)
+        pressure_upstream = vortex_wall_pressure(y2, omega, k3, Up, cp, deltap, N_bl, ops.L1, q0,
+                                                 incident, shift_y2)
     if Z == 0:
         raise NotImplementedError("Velocity_Upstream is undefined in the original far-field script")
     A, A_up = _leading(np.asarray(pressure_upstream), Km_kappa1, Z, ops.Zed)
@@ -435,8 +440,33 @@ def _study_profiles():
     return base, sheared
 
 
+def vortex_wall_pressure(y2, omega, k3, U, c, delta, N_bl, L, q0=1.0, incident="regularised",
+                         shift_y2=0.005):
+    """Wall pressure ``p_w`` under a vortex sheet of strength ``q0`` at each
+    height ``y2`` (thesis eq. 6.4.4, ``p_w = -q0 c0(y2)^2 I0 / U'(y2)``).
+
+    * ``"regularised"``: ``I0`` is the wall pressure of
+      :func:`..inversion.y_greens_convected` -- an extrapolated one-sided limit
+      at the sheet, with ``D`` on the causal branch.
+    * ``"original"``: ``Distributed_WallPressure`` with ``HP = -1``,
+      evaluated a distance ``shift_y2`` above the sheet.  This has an
+      ``O(shift_y2^2)`` error, the conjugate (anti-causal) phase, and the
+      opposite overall sign to (6.4.4), because ``Distributed_WallPressure``
+      returns ``-I0``.  ``|p_w|`` agrees with the regularised value.
+    """
+    y2 = np.atleast_1d(np.asarray(y2, dtype=float))
+    if incident == "original":
+        wp = distributed_wall_pressure(y2, omega / U.f(y2), shift_y2, omega, k3, U, c, delta,
+                                       N_bl, L.l1, L.l2, -1)
+        return -q0 * wp * c.f(y2) ** 2 / U.df(y2)
+    I0 = np.array([incident_sheet(None, None, yj, omega / U.f(yj), k3, omega, U, c, delta, N_bl,
+                                  L, incident)[1].p for yj in y2])
+    return -q0 * c.f(y2) ** 2 * I0 / U.df(y2)
+
+
 def wall_pressure_point_source_scaled(y2=None, omega=None, shift_y2=0.005, cinf=35.0,
-                                      N_bl=3000, k3=0.0, q0=1.0, delta=1.0, plot=False):
+                                      N_bl=3000, k3=0.0, q0=1.0, delta=1.0, plot=False,
+                                      incident="regularised"):
     """``WallPressure_PointSource_Scaled.m`` -- wall pressure beneath a point
     vortex at each ``y2``, for a "base" and a "sheared" piecewise-parabolic
     boundary layer, over a range of frequencies.
@@ -453,13 +483,9 @@ def wall_pressure_point_source_scaled(y2=None, omega=None, shift_y2=0.005, cinf=
            "sheared": np.zeros((omega.size, y2.size), complex)}
     for j, Om in enumerate(omega):
         for name, U in (("base", base), ("sheared", sheared)):
-            C0 = lambda k1: 1j * (Om - U.f(0) * k1)
-            dC1 = lambda k1: -1j * U.df(0) * k1
-            l1 = lambda k1: -C0(k1) ** 2
-            l2 = lambda k1: -3 * C0(k1) * dC1(k1)
-            wp = distributed_wall_pressure(y2, Om / U.f(y2), shift_y2, Om, k3, U, c0, delta,
-                                           N_bl, l1, l2, -1)
-            out[name][j] = -q0 * wp * c0.f(y2) ** 2 / U.df(y2)
+            L = wall_operators(Om, U).hard
+            out[name][j] = vortex_wall_pressure(y2, Om, k3, U, c0, delta, N_bl, L, q0, incident,
+                                                shift_y2)
         log.info("%d of %d", j + 1, omega.size)
         if plot:
             _plot_ri(y2, np.vstack([out["base"][j], out["sheared"][j]]))

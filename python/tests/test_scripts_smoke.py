@@ -53,10 +53,11 @@ def test_pressure_zero_tracker():
     assert np.all(np.isfinite(z)) and np.all(z.imag > 0)
 
 
-def test_hard_soft():
-    r = scattering.hard_soft_continuous(x1=X1, x2=X2, prec_N=300, **SMALL)
+@pytest.mark.parametrize("incident", ["regularised", "original"])
+def test_hard_soft(incident):
+    r = scattering.hard_soft_continuous(x1=X1, x2=X2, prec_N=300, incident=incident, **SMALL)
     _finite(r.I_full, (X1.size, X2.size))
-    r = scattering.far_field_hard_soft(N_theta=15, N_bl=150, prec_N=300)
+    r = scattering.far_field_hard_soft(N_theta=15, N_bl=150, prec_N=300, incident=incident)
     _finite(r.FF, (15,))
 
 
@@ -69,17 +70,19 @@ def test_hard_soft_hard():
 
 
 def test_impedance_junction():
-    r = scattering.imp_imp_continuous(x1=X1, x2=X2, N_CL=60, prec_N=300, **SMALL)
-    _finite(r.I_full, (X1.size, X2.size))
+    # x2 grid avoids y2 = 0.5 exactly: there phi, dphi, v of the incident field are
+    # undefined (NaN by design; p is the finite limit)
+    r = scattering.imp_imp_continuous(x1=X1, x2=np.linspace(0, 1.5, 8), N_CL=60, prec_N=300, **SMALL)
+    _finite(r.I_full, (X1.size, 8))
     r = scattering.far_field_imp_imp(R=2.0, N_theta=15, N_bl=150, prec_N=300)
     _finite(r.FF, (15,))
 
 
 def test_trailing_edge_lined():
     x2 = np.linspace(-1.5, 1.5, 9)
-    for Z in (2 - 2j, np.inf):
+    for Z, inc in ((2 - 2j, "regularised"), (np.inf, "regularised"), (np.inf, "original")):
         r = trailing_edge.trailing_edge_lined(Z=Z, x1=X1, x2=x2, N_CL=60, prec_N=300,
-                                              omega=1.0, **SMALL)
+                                              omega=1.0, incident=inc, **SMALL)
         _finite(r.I_total, (X1.size, x2.size))
 
 

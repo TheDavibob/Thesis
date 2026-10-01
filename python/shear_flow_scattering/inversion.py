@@ -272,6 +272,106 @@ def y_greens_generic(x2, y2, k1, k3, omega, U, c, l1, l2, delta, N_bl, HP, max_b
     return _greens(x2, y2, k1, k3, omega, U, c, delta, N_bl, HP, solver, max_batch)
 
 
+def source_pressure_limit(k1, k3, omega, U, c, delta, y2, side, l1=None, l2=None,
+                          rel_eps=0.02, N_min=1000):
+    """One-sided pressure limit ``p(y2) = lim -C^3 phi`` at the critical level.
+
+    ``side = -1``: the wall solution (BC ``l1 phi' + l2 phi = 0``), approached
+    from below along ``[0, y2)``.  ``side = +1``: the decaying solution,
+    approached from above along ``(y2, delta]``.  Neither path crosses the
+    critical level, so no branch choice is involved.
+
+    ``p`` has Frobenius exponents 0 and 3 at the critical level with no linear
+    term, so ``p(y2 -+ eps) = p(y2) + O(eps^2)``; one Richardson step on
+    ``eps`` and ``eps/2`` gives ``O(eps^3)``.  ``eps = rel_eps * min(y2,
+    delta - y2)``, with at least 40 RK steps per ``eps``.
+    """
+    k = np.atleast_1d(np.asarray(k1, dtype=complex))
+    eps = rel_eps * min(y2, delta - y2)
+    length = y2 if side < 0 else delta - y2
+    vals = []
+    for e in (eps, eps / 2):
+        N = max(N_min, int(np.ceil(40 * length / e)))
+        if side < 0:
+            r = comp_generic_aug18a_skip(k, k3, omega, U, c, l1, l2, N, straight_path(0.0, y2 - e))
+        else:
+            r = comp_dec_aug18a_skip(k, k3, omega, U, c, delta, N, straight_path(delta, y2 + e))
+        vals.append(r.p)
+    return (4 * vals[1] - vals[0]) / 3
+
+
+def y_greens_convected(x2, y2, kappa1, k3, omega, U, c, l1, l2, delta, N_bl, HP=1,
+                       rel_eps=0.02, max_batch=MAX_BATCH) -> Struct:
+    """Regularised Green's function for a vortex sheet at ``y2`` convecting with
+    the flow, ``kappa1 = omega / U(y2)`` -- a replacement for evaluating
+    ``Y_Greens*`` at ``kappa1``.
+
+    Solves ``D_R^dagger g = exp(-i kappa1 x1) delta(x2 - y2)``.  Since
+    ``D_R^dagger = -c0^2 C L`` with ``L`` the ODE (4.2.4), and ``L``'s
+    Green's function carries ``c0^2 C^4|_{y2} / c0^2 C^4|_0`` (Abel),
+
+        g = -C(y2)^3 phi_<(x_<) phi_>(x_>) / (c0(0)^2 C(0)^4 D)
+
+    (thesis 2.20 / 6.3.11 lack the minus sign; 6.3.4 and 6.3.12 have it).
+    At the source ``C(y2) = 0`` and ``phi(y2) = inf``, so this is written in
+    the regular form
+
+        g = p_<(y2) phi_>(x2) / (c0(0)^2 C(0)^4 D)    x2 > y2
+        g = phi_<(x2) p_>(y2) / (c0(0)^2 C(0)^4 D)    x2 < y2
+
+    with ``p = lim -C^3 phi`` taken one-sidedly (:func:`source_pressure_limit`).
+    This limit equals the causal one (``kappa1 -> kappa1 + i0``, equivalently
+    ``Im omega < 0``), which tests verify.  ``phi_<`` satisfies the wall BC
+    with ``phi_<(0) = l1``, ``phi_<'(0) = -l2``, and ``D = W(0) = l1 phi_d'(0) +
+    l2 phi_d(0)`` (``Dispersion_Generic``).
+
+    The Wronskian ``D(kappa1)`` needs ``phi_d`` continued *through* the source's
+    own critical level.  ``HP = +1`` (passing above it) is the causal branch;
+    ``HP = -1`` gives the complex conjugate, as some original scripts used.
+
+    Returns a Struct with fields ``phi, dphi, p, v`` (length ``len(x2)``; the
+    exponential ``exp(-i kappa1 x1)`` is *not* included), plus ``D``,
+    ``p_below = p_<(y2)``, ``p_above = p_>(y2)`` and the wall values
+    ``phi0, dphi0, p0, v0`` (``p0 = I0``, the unit-source wall pressure, 6.3.5).
+    At ``x2 == y2`` exactly, ``p`` is the (continuous) limit and ``phi, dphi,
+    v`` are NaN.
+    """
+    if HP == 0:
+        raise ValueError("HP must be +1 or -1: D(kappa1) needs a path round the critical level")
+    x2 = row(x2)
+    k = np.atleast_1d(complex(kappa1))
+    C = lambda x: 1j * (omega - U.f(x) * k)
+    p_lo = source_pressure_limit(k, k3, omega, U, c, delta, y2, -1, l1, l2, rel_eps)[0]
+    p_hi = source_pressure_limit(k, k3, omega, U, c, delta, y2, +1, rel_eps=rel_eps)[0]
+    dec0 = comp_dec_aug18a_skip(k, k3, omega, U, c, delta, N_bl, path_to(delta, 0.0, HP))
+    D = (l1(k) * dec0.dphi + l2(k) * dec0.phi)[0]
+    norm = 1 / (c.f(0) ** 2 * C(0)[0] ** 4 * D)
+
+    rx = np.real(x2)
+    above = (rx > y2) & (rx < delta)
+    below = rx < y2
+    at = rx == y2
+    Y = Struct(**{f: np.zeros(x2.size, dtype=complex) for f in FIELDS})
+    dec = _sweep(lambda K, Xs: comp_dec_aug18a_skip(K, k3, omega, U, c, delta, N_bl,
+                                                   straight_path(delta, Xs)), x2[above], k, max_batch)
+    low = _sweep(lambda K, Xs: comp_generic_aug18a_skip(K, k3, omega, U, c, l1, l2, N_bl,
+                                                       straight_path(0.0, Xs)), x2[below], k, max_batch)
+    for f in FIELDS:
+        Y[f][above] = p_lo * dec[f][:, 0]
+        Y[f][below] = p_hi * low[f][:, 0]
+    Y2 = Struct(**{f: Y[f][:, None] for f in FIELDS})
+    _outer(Y2, x2, k, k3, omega, U, c, delta, p_lo)
+    out = Struct(**{f: norm * Y2[f][:, 0] for f in FIELDS})
+    for f in ("phi", "dphi", "v"):
+        out[f][at] = np.nan
+    out.p[at] = norm * p_lo * p_hi
+    C0, dC0 = C(0)[0], (-1j * U.df(0) * k)[0]
+    phi0, dphi0 = norm * p_hi * l1(k)[0], norm * p_hi * -l2(k)[0]
+    out.update(D=D, p_below=p_lo, p_above=p_hi, norm=norm, phi0=phi0, dphi0=dphi0,
+               p0=-C0 ** 3 * phi0, v0=-3 * dC0 * C0 * phi0 - C0 ** 2 * dphi0)
+    return out
+
+
 def y_greens_wake(x2, y2, k1, k3, omega, Up, cp, Um, cm, l1, l2, deltap, deltam, N_bl, HP,
                   max_batch=MAX_BATCH) -> Struct:
     """``Y_GreensWake.m`` -- point source above a wake (``x2 = 0`` is the

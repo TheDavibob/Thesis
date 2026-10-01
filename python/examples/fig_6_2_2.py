@@ -33,6 +33,7 @@ res = trailing_edge_lined(
     Up=u_parabolic(0.3, 1.0, 1.0), Um=u_parabolic(0.3, 1.5, 1.0),
     cp=c_const(5.0), cm=c_const(5.0), deltap=1.0, deltam=1.0,
     omega=1.0, Z=np.inf, y2=0.5,
+    incident="original",  # as the thesis; "regularised" fixes the overall phase/amplitude
     x1=np.arange(-5, 10 + 1e-9, 0.1 if fast else 0.05),
     x2=np.arange(-2, 2 + 1e-9, 0.04 if fast else 0.02),
     N_bl=500 if fast else 2000, N_C=200 if fast else 500, N_CL=400 if fast else 1000,

@@ -119,3 +119,50 @@ def blend_far_field(FFp: Struct, FFm: Struct, use_minus) -> Struct:
         v[use_minus] = FFm[f][use_minus]
         out[f] = v
     return out
+
+
+#: Allowed values of the ``incident`` switch in the single-sheet scripts.
+INCIDENT_MODES = ("regularised", "original")
+
+
+def incident_sheet(x1, x2, y2, kappa1, k3, omega, U, c, delta, N_bl, L, incident="regularised",
+                   Q0=1e-10, hard=False):
+    """Incident field of a vortex sheet at ``y2`` convecting at ``kappa1 = omega/U(y2)``.
+
+    Returns ``(I, wall)``: ``I`` holds ``phi, dphi, p, v`` on the ``x1 x x2``
+    grid (``None`` if ``x2`` is ``None``) and ``wall`` the same fields at
+    ``x2 = 0`` (scalars), from which the scripts build the scattering forcing.
+
+    * ``"regularised"`` (default): :func:`..inversion.y_greens_convected`,
+      a unit sheet with ``D_R^dagger g = exp(-i kappa1 x1) delta(x2 - y2)``.
+      Finite, independent of resolution, continuous across the sheet, and on
+      the causal critical-layer branch.  ``Q0`` is ignored.  On a grid row
+      with ``x2 == y2`` exactly, ``phi``, ``dphi`` and ``v`` are NaN (``phi`` is
+      infinite there and ``v`` jumps across the sheet); ``p`` is the finite limit.
+    * ``"original"``: the MATLAB approach -- ``Y_Greens{Hard,Generic}`` at
+      ``kappa1`` with ``HP = -1``, scaled by ``Q0``.  This evaluates ``phi`` at its
+      own critical level, so the amplitude grows like ``N_bl^3`` (absorbed by
+      ``Q0 = 1e-10``) and the incident pressure jumps across the sheet by about
+      ``((delta - y2)/y2)^3`` unless ``y2 = delta/2``.  Kept to reproduce the
+      thesis figures.  ``hard=True`` uses ``Y_GreensHard``'s normalisation, as
+      the hard-wall scripts did.
+    """
+    from ..inversion import y_greens_convected, y_greens_generic, y_greens_hard
+
+    if incident == "regularised":
+        xx = np.zeros(1) if x2 is None else row(x2)
+        G = y_greens_convected(xx, y2, kappa1, k3, omega, U, c, L.l1, L.l2, delta, N_bl)
+        wall = Struct(phi=G.phi0, dphi=G.dphi0, p=G.p0, v=G.v0)
+        if x2 is None:
+            return None, wall
+        X = np.exp(-1j * row(x1) * kappa1)
+        return Struct(**{f: np.outer(X, G[f]) for f in FIELDS}), wall
+    if incident != "original":
+        raise ValueError(f"incident must be one of {INCIDENT_MODES}, not {incident!r}")
+    if hard:
+        Yf = lambda xx: y_greens_hard(xx, y2, kappa1, k3, omega, U, c, delta, N_bl, -1)
+    else:
+        Yf = lambda xx: y_greens_generic(xx, y2, kappa1, k3, omega, U, c, L.l1, L.l2, delta, N_bl, -1)
+    w = Yf(0)
+    wall = Struct(**{f: Q0 * w[f][0, 0] for f in FIELDS})
+    return (None if x2 is None else upstream_field(x1, Yf(x2), kappa1, Q0)), wall
