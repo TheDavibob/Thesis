@@ -269,3 +269,28 @@ def test_hardsoft_kernel_factorisation(U0):
                                         Struct(N=1000), np.pi)
     k = contours.tanh_contour(0, 1, -1, 1)[0](np.array([-4, -1.5, -0.3, 0.2, 0.8, 2.0, 4.0]))
     assert np.allclose(g.p(k) * g.m(k), Kern(k), rtol=1e-3)
+
+
+def test_distribution_weight_jacobian_ratio():
+    """'jacobian' differs from 'thesis' by exactly (dy2/dkappa1)^2."""
+    from shear_flow_scattering.distributed import distribution_weight
+    U, c, om = profiles.u_parabolic(0.3, 1, 1), profiles.c_const(5), 2.0
+    y = np.array([0.0, 0.3, 0.8])
+    dy_dk = -U.f(y) ** 2 / (om * U.df(y))
+    assert np.allclose(distribution_weight(om, U, c, y, "jacobian"),
+                       distribution_weight(om, U, c, y, "thesis") * dy_dk ** 2)
+    with pytest.raises(ValueError):
+        distribution_weight(om, U, c, y, "other")
+
+
+def test_jacobian_weighting_equals_y2_integral():
+    """With 'jacobian', sum_j g w_j omega_c = int_0^delta c^2 omega_c / U' dy2 (the
+    literal source integral, up to the sign convention of dkappa1)."""
+    from shear_flow_scattering.distributed import distribution_weight, kappa1_quad
+    U, c, om = profiles.u_parabolic(0.3, 1, 1), profiles.c_const(5), 1.0
+    k, w, y = kappa1_quad(om, U, 1.0, 400)
+    oc = lambda y: (1 - y) ** 2
+    lhs = np.sum(distribution_weight(om, U, c, y, "jacobian") * oc(y) * w)
+    yy, wy = q.lgwt(400, 0, 1)
+    rhs = np.sum(25 * oc(yy) / U.df(yy) * wy)
+    assert np.isclose(abs(lhs), abs(rhs), rtol=1e-4)

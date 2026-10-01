@@ -104,6 +104,24 @@ def test_distributed_trailing_edge_and_rerun():
     assert not np.allclose(r.I_total.p, r2.I_total.p)
 
 
+def test_distributed_weighting_toggle(caplog):
+    x2 = np.linspace(-1.2, 1.2, 9)
+    r = trailing_edge.distributed_trailing_edge(x1=X1, x2=x2, N_distribution=6, N_CL=60,
+                                                prec_N=300, **SMALL)
+    oc = (1 - r.y2) ** 2
+    th = trailing_edge.rerun_with_vorticity(r.state, oc)  # default: as MATLAB
+    assert th.weighting == "thesis"
+    caplog.clear()
+    jac = trailing_edge.rerun_with_vorticity(r.state, oc, weighting="jacobian")
+    _finite(jac.I_total, (X1.size, x2.size))
+    assert not np.allclose(th.I_total.p, jac.I_total.p)
+    # omega_c = 1 does not vanish where U'(delta) = 0 -> warned
+    trailing_edge.rerun_with_vorticity(r.state, np.ones(r.y2.size), weighting="jacobian")
+    assert "log-divergent" in caplog.text
+    with pytest.raises(ValueError):
+        trailing_edge.rerun_with_vorticity(r.state, oc, weighting="nonsense")
+
+
 def test_wall_pressure_scaled():
     r = trailing_edge.wall_pressure_point_source_scaled(y2=[0.2, 0.4], omega=[1.0, 10.0], N_bl=200)
     assert np.all(np.isfinite(r.Full_Pressure_base))

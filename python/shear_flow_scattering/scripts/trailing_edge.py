@@ -25,7 +25,7 @@ import numpy as np
 
 from .._utils import FIELD_SIGN_BELOW, FIELDS, Struct, log, row
 from ..contours import contour_semicircle, tanh_contour, veitch_contour
-from ..distributed import (distributed_wall_pressure, fbar, kappa1_quad, upstream_distributed_a,
+from ..distributed import (distributed_wall_pressure, distribution_weight, fbar, kappa1_quad, upstream_distributed_a,
                            upstream_distributed_b, upstream_distributed_integrated)
 from ..factorisation import fact_mult_cont_scaled_finite
 from ..inversion import (dispersion_generic_nov2018, fourier_nov2018, integral_nov2018,
@@ -344,13 +344,19 @@ def distributed_trailing_edge(Up=None, Um=None, cp=None, cm=None, deltap=1.0, de
                               N_distribution=80, shift_y2=0.01, omega_c=None, N_C=500,
                               angle=3 * np.pi / 8, curvature=0.01, apex=None, N_CL=1000,
                               shift1=None, shift2=None, prec_N=2000, branch_cut=np.pi,
-                              mode_guess=0.9 + 0.35j):
+                              mode_guess=0.9 + 0.35j, weighting="thesis"):
     """``Distributed_TrailingEdge.m`` -- hard plate with a vorticity
     distribution ``omega_c(y2)`` across the upper boundary layer.
 
     Returns the result Struct; ``res.state`` holds everything independent of
-    ``omega_c`` so :func:`rerun_with_vorticity` can cheaply try other
-    distributions (the ``_VarOmegaC`` script).
+    ``omega_c`` (and of ``weighting``) so :func:`rerun_with_vorticity` can
+    cheaply try other distributions (the ``_VarOmegaC`` script).
+
+    ``weighting`` is ``"thesis"`` (eq. 6.3.10, as the MATLAB) or
+    ``"jacobian"`` (the literal ``y2 -> kappa1`` change of variables); see
+    :func:`..distributed.distribution_weight`.  Note ``"jacobian"`` with the
+    default ``omega_c = 1`` is log-divergent at the edge of a parabolic
+    boundary layer.
 
     .. warning:: **Bug fixed.**  The critical-layer start was
        ``min(omega/Up.f(deltap), omega/Up.f(deltap))`` -- ``Up`` twice; the
@@ -380,25 +386,52 @@ def distributed_trailing_edge(Up=None, Um=None, cp=None, cm=None, deltap=1.0, de
                                       L1.l1, L1.l2, 1)
     st.Km_distributed = st.K.m(kappa1)
     st.update(kappa1=kappa1, dkappa1=dkappa1, y2=y2)
-    return rerun_with_vorticity(st, np.ones(y2.size) if omega_c is None else omega_c)
+    return rerun_with_vorticity(st, np.ones(y2.size) if omega_c is None else omega_c, weighting)
 
 
-def rerun_with_vorticity(state: Struct, omega_c) -> Struct:
+def rerun_with_vorticity(state: Struct, omega_c, weighting="thesis") -> Struct:
     """``Distributed_TrailingEdge_VarOmegaC.m`` -- recompute only what depends
-    on the vorticity distribution ``omega_c`` (length ``N_distribution``).
+    on the vorticity distribution ``omega_c`` (length ``N_distribution``)
+    and the ``weighting`` toggle (``"thesis"`` or ``"jacobian"``).
 
     Example from the original: ``omega_c = y2 * (deltap - y2)``.
     """
     st = state
     omega_c = row(omega_c)
-    I_up = upstream_distributed_integrated(st.x1, omega_c, st.G_01, st.dkappa1)
-    Int = (-st.omega * st.cp.f(st.y2) ** 2 * st.I0 * omega_c
-           / (st.Km_distributed * st.Up.f(st.y2) ** 2))
+    if weighting == "jacobian":
+        _check_jacobian_integrable(st, omega_c)
+    g = distribution_weight(st.omega, st.Up, st.cp, st.y2, weighting)
+    I_up = upstream_distributed_integrated(st.x1, omega_c, st.G_01, st.dkappa1, weighting)
+    # thesis weighting: Int = -omega c^2 I0 omega_c / (Km U^2), as the MATLAB
+    Int = -g * st.I0 * omega_c / st.Km_distributed
     F_bar = lambda k: fbar(k, st.kappa1, st.dkappa1, Int)
     A = 1 / 1j  # "Much simpler than before"
     res = _te_assemble(st, F_bar, A, A, I_up)
-    res.update(state=st, omega_c=omega_c, y2=st.y2, kappa1=st.kappa1)
+    res.update(state=st, omega_c=omega_c, y2=st.y2, kappa1=st.kappa1, weighting=weighting)
     return res
+
+
+def _check_jacobian_integrable(st, omega_c):
+    """Warn if the ``"jacobian"`` source integral looks divergent.
+
+    In ``y2`` the integrand is ``c0^2 omega_c / U'``, so where ``U'(delta) = 0``
+    it is integrable only if ``omega_c = O(delta - y2)``.  Heuristic: flag it
+    when the node nearest the edge carries more than 10% of the total |weight|
+    (at N = 80: ``omega_c = 1`` ~29%, ``y2 (1 - y2)`` ~7%, ``(1 - y2)^2`` ~0.2%).
+    On coarse grids this also flags under-resolution: the ``kappa1``
+    quadrature clusters near the wall (6 nodes reach only ``y2 ~ 0.68``).
+    """
+    if abs(st.Up.df(st.deltap)) > 1e-8 * abs(st.Up.df(0)):
+        return
+    g = distribution_weight(st.omega, st.Up, st.cp, st.y2, "jacobian")
+    contrib = np.abs(g * omega_c * st.dkappa1)
+    if contrib[np.argmax(st.y2)] > 0.1 * contrib.sum():
+        log.warning("weighting='jacobian': the outermost source node carries >10% of the "
+                    "source weight. Either omega_c does not vanish at y2 = delta, where "
+                    "U' = 0 (then the integral is log-divergent and grows with "
+                    "N_distribution; omega_c must vanish at least linearly there), or "
+                    "N_distribution is too small to resolve the edge (the kappa1 "
+                    "quadrature clusters near the wall).")
 
 
 # ---------------------------------------------------------------------------

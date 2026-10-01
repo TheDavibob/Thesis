@@ -184,12 +184,49 @@ def upstream_distributed_b(x2, A: Struct, omega, k3, U, c, delta) -> Struct:
     return G
 
 
-def upstream_distributed_integrated(x1, omega_c, G: Struct, dkappa1) -> Struct:
+#: Allowed values of the ``weighting`` toggle (see :func:`distribution_weight`).
+WEIGHTINGS = ("thesis", "jacobian")
+
+
+def distribution_weight(omega, U, c, y2, weighting="thesis"):
+    """Factor ``g(y2)`` converting ``omega_c(y2) d kappa1`` into source strength.
+
+    The distributed source is ``int F(y2) (...) dy2`` with ``F = -c0^2
+    omega_c / U'`` (thesis 6.3.9), rewritten as an integral over
+    ``kappa1 = omega / U(y2)`` (``dy2 = -U^2 d kappa1 / (omega U')``).  Both
+    the incident field and ``F_bar`` use ``g * omega_c * d kappa1``.
+
+    * ``"thesis"`` -- ``g = omega c0^2 / U^2``: thesis eq. (6.3.10) and the
+      original MATLAB (``Upstream_Distributed_Integrated.m``,
+      ``Distributed_TrailingEdge.m``).  (The printed (6.3.10) also carries a
+      minus sign; the MATLAB absorbs it in the sign of ``I0``.)
+    * ``"jacobian"`` -- ``g = c0^2 U^2 / (omega U'^2)``: the literal change of
+      variables.  It differs from ``"thesis"`` by ``(U^2 / (omega U'))^2 =
+      (dy2/d kappa1)^2``, i.e. the thesis applies the Jacobian upside down.
+
+    .. warning:: With ``"jacobian"`` the integrand, back in ``y2``, is
+       ``c0^2 omega_c / U'``, which is not integrable where ``U' = 0`` -- at
+       ``y2 = delta`` for the parabolic profiles -- unless ``omega_c``
+       vanishes there at least linearly.  For ``omega_c = 1`` the integral
+       diverges logarithmically and results grow with ``N_distribution``.
+    """
+    if weighting == "thesis":
+        return omega * c.f(y2) ** 2 / U.f(y2) ** 2
+    if weighting == "jacobian":
+        return c.f(y2) ** 2 * U.f(y2) ** 2 / (omega * U.df(y2) ** 2)
+    raise ValueError(f"weighting must be one of {WEIGHTINGS}, not {weighting!r}")
+
+
+def upstream_distributed_integrated(x1, omega_c, G: Struct, dkappa1, weighting="thesis") -> Struct:
     """``Upstream_Distributed_Integrated.m`` -- integrate the Green's function
     against the vorticity distribution ``omega_c(y2)``.  Returns
-    ``phi, dphi, p, v`` of shape ``(len(x1), len(x2))``.  (Vectorised.)"""
+    ``phi, dphi, p, v`` of shape ``(len(x1), len(x2))``.  (Vectorised.)
+
+    ``weighting`` selects the ``y2 -> kappa1`` weight; see
+    :func:`distribution_weight`.  ``"thesis"`` reproduces the MATLAB.
+    """
     x1 = row(x1)
-    w = G.omega * row(omega_c) * G.c.f(G.y2) ** 2 * row(dkappa1) / G.U.f(G.y2) ** 2
+    w = row(omega_c) * row(dkappa1) * distribution_weight(G.omega, G.U, G.c, G.y2, weighting)
     fourier = np.exp(-1j * np.outer(G.kappa1, x1))  # (y2, x1)
     return Struct(**{f: (fourier.T * w[None, :]) @ G[f].T for f in FIELDS})
 
