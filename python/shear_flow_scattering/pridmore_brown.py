@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ._utils import Path, Struct, row
+from ._utils import Path, Struct, log, row
 from .complex_funcs import sqrt_a
 from .ivp import (fixed_step_ivp, fixed_step_ivp_gridx, fixed_step_ivp_gridx_skip,
                   fixed_step_ivp_skip)
@@ -267,7 +267,22 @@ def hard_aug18a_gridx_skip(x2_max, k1, k3, omega, U, c, delta, N):
 # ==========================================================================
 # Complex-path solvers (FixedStep/PridmoreBrown/Complex_Contour/*.m)
 # ==========================================================================
+_warned_nonanalytic = set()
+
+
+def _check_path(U, z):
+    """Warn (once per profile) if a non-analytic profile meets a complex path."""
+    if getattr(U, "analytic", True) or id(U) in _warned_nonanalytic:
+        return
+    s = np.linspace(0, 1, 5)
+    if np.any(np.abs(np.imag(z.f(s))) > 1e-12):
+        _warned_nonanalytic.add(id(U))
+        log.warning("profile is not analytic in complex x2 (piecewise), but the integration "
+                    "path leaves the real axis: results are invalid. Use a real path.")
+
+
 def _comp_full(k1, k3, omega, U, c, N, z, ic):
+    _check_path(U, z)
     k1 = row(k1)
     f = lambda s, phi, k: comp_ode_fun_pb(s, phi, k, omega, c, U, k3, z)
     phi1, s = fixed_step_ivp(f, ic, 1.0, N, k1)
@@ -279,6 +294,7 @@ def _comp_full(k1, k3, omega, U, c, N, z, ic):
 
 
 def _comp_skip(k1, k3, omega, U, c, N, z, ic):
+    _check_path(U, z)
     k1 = row(k1)
     f = lambda s, phi, k: comp_ode_fun_pb(s, phi, k, omega, c, U, k3, z)
     phi1 = fixed_step_ivp_skip(f, ic, 1.0, N, k1)

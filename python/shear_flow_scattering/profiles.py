@@ -19,11 +19,16 @@ from ._utils import Struct, log
 
 
 class Profile(Struct):
-    """Struct with ``f``, ``df``, ``d2f`` (optionally ``d3f``) callables."""
+    """Struct with ``f``, ``df``, ``d2f`` (optionally ``d3f``) callables.
+
+    ``analytic`` records whether ``f`` is an analytic function of complex
+    ``x2``.  The deformed (complex) integration paths used to step round the
+    critical layer are only valid for analytic profiles.
+    """
 
     def __init__(self, f: Callable, df: Callable, d2f: Optional[Callable] = None,
-                 d3f: Optional[Callable] = None):
-        super().__init__(f=f, df=df)
+                 d3f: Optional[Callable] = None, analytic: bool = True):
+        super().__init__(f=f, df=df, analytic=analytic)
         if d2f is not None:
             self.d2f = d2f
         if d3f is not None:
@@ -60,6 +65,21 @@ def u_parabolic(U0, Uinf, deltainf) -> Profile:
                    lambda x2: -2 * A * _ones(x2))
 
 
+def u_power(U0, Uinf, deltainf, n) -> Profile:
+    """``U = Uinf - (Uinf - U0) (1 - x2/delta)^n`` (new; not in the MATLAB).
+
+    Analytic, monotonic and inflection-free, with ``U'(delta) = 0`` for
+    ``n >= 2``; ``n = 2`` is :func:`u_parabolic`.  Wall shear
+    ``U'(0) = n (Uinf - U0) / delta``, so ``n`` varies the near-wall shear at
+    fixed slip velocity.
+    """
+    D = Uinf - U0
+    xi = lambda x2: 1 - np.asarray(x2) / deltainf
+    return Profile(lambda x2: Uinf - D * xi(x2) ** n,
+                   lambda x2: n * D / deltainf * xi(x2) ** (n - 1),
+                   lambda x2: -n * (n - 1) * D / deltainf ** 2 * xi(x2) ** (n - 2))
+
+
 def u_parabolic_b(u, delta) -> Profile:
     """``Struct_U_Parabolic_B.m``: parabola through three points ``U(delta_j) = u_j``."""
     C = ((u[2] - u[0]) / (delta[2] - delta[0])
@@ -74,7 +94,13 @@ def u_parabolic_b(u, delta) -> Profile:
 
 def u_pw_parabolic(U_points, delta_points) -> Profile:
     """``Struct_U_PWParabolic.m``: two parabolas joined at ``delta_points[1]``
-    with continuous value and shear; ``U'(deltainf) = 0``."""
+    with continuous value and shear; ``U'(deltainf) = 0``.
+
+    .. warning:: Not analytic (``U''`` jumps at the join, and the branch is
+       chosen by ``Re x2``), so results from complex/semicircular integration
+       paths are wrong -- by O(1) for the paper's Fig. 5 "base" profile.
+       Only real-axis integration (k1 off the critical layer) is valid.
+    """
     U0, U1, Uinf = U_points
     d0, d1, dinf = delta_points
     A = (U1 - Uinf) / (d1 - dinf) ** 2
@@ -87,11 +113,12 @@ def u_pw_parabolic(U_points, delta_points) -> Profile:
         return np.where(up, above(x2), below(x2))
 
     return Profile(
-        lambda x2: pick(x2, lambda x: U1 + sigma * (x - d1) + A * (x - d1) ** 2,
+        analytic=False,  # piecewise: complex-path integration is invalid (see README)
+        f=lambda x2: pick(x2, lambda x: U1 + sigma * (x - d1) + A * (x - d1) ** 2,
                         lambda x: U1 + sigma * (x - d1) + B * (x - d1) ** 2),
-        lambda x2: pick(x2, lambda x: sigma + 2 * A * (x - d1),
-                        lambda x: sigma + 2 * B * (x - d1)),
-        lambda x2: pick(x2, lambda x: 2 * A * _ones(x), lambda x: 2 * B * _ones(x)))
+        df=lambda x2: pick(x2, lambda x: sigma + 2 * A * (x - d1),
+                           lambda x: sigma + 2 * B * (x - d1)),
+        d2f=lambda x2: pick(x2, lambda x: 2 * A * _ones(x), lambda x: 2 * B * _ones(x)))
 
 
 def u_cubic(U0, sigma0) -> Profile:

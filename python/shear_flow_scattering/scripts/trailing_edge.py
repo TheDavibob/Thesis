@@ -27,10 +27,11 @@ from .._utils import FIELD_SIGN_BELOW, FIELDS, Struct, log, row
 from ..contours import contour_semicircle, tanh_contour, veitch_contour
 from ..distributed import (distributed_wall_pressure, distribution_weight, fbar, kappa1_quad, upstream_distributed_a,
                            upstream_distributed_b, upstream_distributed_integrated)
-from ..factorisation import fact_mult_cont_scaled_finite
+from ..factorisation import fact_mult_scaled_auto_winding, winding_number
 from ..inversion import (dispersion_generic_nov2018, fourier_nov2018, integral_nov2018,
                          y_continuous_scattering, y_greens_generic)
 from ..kernels import ff_wake_kernel, wake_kernel
+from ..pridmore_brown import branch_points
 from ..profiles import c_const, u_linear, u_parabolic, u_pw_parabolic
 from ..steepest_descent import far_field_saddle
 from ..zeros import newton_raphson
@@ -80,12 +81,77 @@ def _dispersions(ops, k3, omega, Up, cp, deltap, Um, cm, deltam, N_bl):
     return Struct(DZ1=DZ1, DZ2=DZ2, Dh1=Dh1, Dp1=Dp1, Dh2=Dh2, Dp2=Dp2, Dw=Dw)
 
 
-def _wake_factorisation(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl, contour, prec_N,
-                        branch_cut):
+def _wake_contour(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl, heights=(1, 2, 3, 4)):
+    """Tanh factorisation contour passing *above* every wake mode.
+
+    Zeros of ``D_w`` (wake modes) are downstream disturbances, so by
+    Briggs-Bers they must lie below the factorisation contour.  Unstable wake
+    modes rise with frequency and wall shear: at omega = 5 and U'(0) >= 3.5
+    the mode sits at Im k1 ~ 1, above the fixed height-1 contour the original
+    code used, which gave a wrong (and different) factorisation.
+
+    Raising the contour changes the winding of ``K/Kff`` once per zero it
+    crosses, so the lowest height whose winding matches the tallest has every
+    zero below it.  (Plate modes, the poles of ``K``, would need to stay above;
+    for a hard plate with non-inflected profiles there are none in the UHP.)
+    """
     z1, z2 = contour_semicircle(deltap, 1), contour_semicircle(deltam, 1)
     Kernel = lambda k1: wake_kernel(k1, k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl, z1, z2)
     Kff = ff_wake_kernel(k3, omega, Up.f(0), cp.f(0), Up.df(0), -Um.df(0), Z, 0)
-    return fact_mult_cont_scaled_finite(Kernel, Kff, contour, Struct(N=prec_N), branch_cut)
+    winds = [winding_number(lambda k: Kernel(k) / Kff.f(k), tanh_contour(0, b, -1, 1)[0])
+             for b in heights]
+    b = next(b for b, w in zip(heights, winds) if w == winds[-1])
+    if b != heights[0]:
+        log.info("wake mode(s) above the height-%g contour; using height %g", heights[0], b)
+    return tanh_factor_contour(b)
+
+
+def tanh_factor_contour(height, x0=0.0) -> Struct:
+    """Tanh factorisation contour of the given height crossing the real axis at ``x0``."""
+    Cp, dCp = tanh_contour(0, height, x0 - 1, x0 + 1)
+    return Struct(Cp=Cp, dCp=dCp, Cm=Cp, dCm=dCp, height=height, x0=x0)
+
+
+class _TwoContourFactors(Struct):
+    """``K+`` / ``K-`` evaluated with whichever of two equivalent factorisation
+    contours crosses the real axis farther from ``Re k1``.
+
+    Far-field saddle points fill the whole interval between the acoustic
+    branch points, which is where any valid contour must cross the real axis;
+    near the crossing the Cauchy quadrature is near-singular (spikes at
+    theta ~ 90 deg for low Mach).  Both contours give the same factorisation
+    (no singularities between them), so this only improves accuracy.
+    """
+
+    def __init__(self, Ka, Kb, xa, xb):
+        def pick(fa, fb):
+            def f(k):
+                k = np.asarray(k, dtype=complex)
+                use_a = np.abs(np.real(k) - xa) >= np.abs(np.real(k) - xb)
+                out = np.empty(k.shape, dtype=complex)
+                if use_a.any():
+                    out[use_a] = fa(k[use_a])
+                if (~use_a).any():
+                    out[~use_a] = fb(k[~use_a])
+                return out
+            return f
+        super().__init__(p=pick(Ka.p, Kb.p), m=pick(Ka.m, Kb.m), f=Ka.f, W=Ka.W)
+
+
+def _wake_factorisation(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl, contour, prec_N,
+                        branch_cut, W="auto"):
+    """Factorise the wake kernel along ``contour``.
+
+    ``W`` is the far-field winding correction passed to ``FFWake_Kernel``.
+    The original scripts always used ``W = 0``; but ``K / Kff`` can wind round
+    0 along the contour (e.g. once at omega = 5 for the default flow), which
+    makes ``log(K/Kff)`` discontinuous and the factorisation wrong and
+    contour-dependent.  ``W="auto"`` measures the winding and cancels it.
+    """
+    z1, z2 = contour_semicircle(deltap, 1), contour_semicircle(deltam, 1)
+    Kernel = lambda k1: wake_kernel(k1, k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl, z1, z2)
+    ff = lambda w: ff_wake_kernel(k3, omega, Up.f(0), cp.f(0), Up.df(0), -Um.df(0), Z, w)
+    return fact_mult_scaled_auto_winding(Kernel, ff, contour, Struct(N=prec_N), branch_cut, W)
 
 
 # ---------------------------------------------------------------------------
@@ -134,10 +200,9 @@ def _te_setup(Up, cp, deltap, Um, cm, deltam, omega, Z, k3, x1, x2, N_bl, N_C, a
                    Dw_CLp=D.Dw(st.C_CLp.k, 1), Dw_CLm=D.Dw(st.C_CLm.k, -1))
     log.info("Computed dispersion relationships along integration contours")
 
-    Cp, dCp = tanh_contour(0, 1, -1, 1)
-    Cm, dCm = tanh_contour(0, 1, -1, 1)
+    contour = _wake_contour(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl)
     st.K = K = _wake_factorisation(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl,
-                                   Struct(Cp=Cp, dCp=dCp, Cm=Cm, dCm=dCm), prec_N, branch_cut)
+                                   contour, prec_N, branch_cut)
     st.Kf = Struct(p1=K.p(st.Cp1.k), m1=K.m(st.Cm1.k), p2=K.p(st.Cp2.k), m2=K.m(st.Cm2.k),
                    CLp=K.m(st.C_CLp.k), CLm=K.m(st.C_CLm.k), modes=K.m(st.zeros_wake_m))
     log.info("Kernel found and factorised")
@@ -263,7 +328,8 @@ def far_field_trailing_edge_lined(U0=0.3, Uinfp=1.0, Uinfm=1.0, deltap=1.0, delt
                                   N_theta_p=300, N_theta_m=300, prec_N=10000, scale=1.0,
                                   branch_cut=3 * np.pi / 2, shift_y2=0.001, Up=None, Um=None,
                                   cp=None, cm=None, theta1=None, theta2=None, kappa1=None,
-                                  pressure_upstream=None, incident="regularised"):
+                                  pressure_upstream=None, incident="regularised",
+                                  factor_contour="tanh"):
     """``FarField_TrailingEdge_Lined.m`` -- far-field directivity of the
     trailing-edge problem ("Only really optimised for hard-wall").
 
@@ -291,10 +357,33 @@ def far_field_trailing_edge_lined(U0=0.3, Uinfp=1.0, Uinfm=1.0, deltap=1.0, delt
     ops = plate_operators(omega, Z, Up, Um)
 
     shift = 0.5 * (0.5 * (S1[0] - S1[-1]))
-    Cp, dCp = veitch_contour(S1[0] - shift, -scale * omega, 0.5 * omega / Up.f(0))
-    Cm, dCm = veitch_contour(S1[-1] + shift, -scale * omega, 0.5 * omega / Up.f(0))
-    K = _wake_factorisation(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl,
-                            Struct(Cp=Cp, dCp=dCp, Cm=Cm, dCm=dCm), prec_N, branch_cut)
+    # factor_contour: "tanh" (default; validated contour-independent and against
+    # near-field inversion) or "veitch" (as FarField_TrailingEdge_Lined.m:
+    # centred on the requested saddle points, its result depends on which
+    # angles are requested and is wrong for a single angle -- kept only to
+    # reproduce the original), or a (a, b, tm, tp) tanh tuple.
+    if factor_contour == "veitch":
+        Cp, dCp = veitch_contour(S1[0] - shift, -scale * omega, 0.5 * omega / Up.f(0))
+        Cm, dCm = veitch_contour(S1[-1] + shift, -scale * omega, 0.5 * omega / Up.f(0))
+    elif factor_contour == "tanh":
+        # height chosen to pass above all wake modes; two crossing points so that
+        # no saddle point is evaluated near a contour (see _TwoContourFactors)
+        h = _wake_contour(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl).height
+        kb1p, kb2p = branch_points(omega, Up.f(deltap), cp.f(deltap), k3)
+        kb1m, kb2m = branch_points(omega, Um.f(deltam), cm.f(deltam), k3)
+        lo, hi = max(np.real(kb2p), np.real(kb2m)), min(np.real(kb1p), np.real(kb1m))
+        xa, xb = lo + 0.3 * (hi - lo), lo + 0.7 * (hi - lo)
+        Ka, Kb = (_wake_factorisation(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl,
+                                      tanh_factor_contour(h, x), prec_N, branch_cut) for x in (xa, xb))
+        K = _TwoContourFactors(Ka, Kb, xa, xb)
+    elif isinstance(factor_contour, tuple):
+        Cp, dCp = tanh_contour(*factor_contour)
+        Cm, dCm = tanh_contour(*factor_contour)
+    else:
+        raise ValueError("factor_contour must be 'veitch', 'tanh' or a tanh tuple")
+    if factor_contour != "tanh":
+        K = _wake_factorisation(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl,
+                                Struct(Cp=Cp, dCp=dCp, Cm=Cm, dCm=dCm), prec_N, branch_cut)
     Km_kappa1 = K.m(kappa1)
 
     if pressure_upstream is None:

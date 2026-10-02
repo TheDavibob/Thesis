@@ -73,6 +73,7 @@ def test_rk4_damped_oscillator():
     profiles.u_cubic_b([0.2, 0.7, 1], [0, 0.4, 1]), profiles.u_quartic([0.2, 0.7, 1], [0, 0.4, 1]),
     profiles.u_parabolic_b([0.2, 0.7, 1], [0, 0.4, 1]),
     profiles.u_pw_parabolic([0.6, 0.7, 1], [0, 0.1, 1]),
+    profiles.u_power(0.3, 1, 1, 3), profiles.u_power(0.3, 1, 1, 8),
 ])
 def test_profile_derivatives(U):
     x, h = np.array([0.05, 0.37, 0.8]), 1e-6
@@ -343,3 +344,33 @@ def test_convected_greens_continuous_and_resolution_independent(y2):
     assert np.isclose(m.D, np.conj(a.D), rtol=1e-8)
     with pytest.raises(ValueError):
         y_greens_convected(x, y2, om / U.f(y2), 0.0, om, U, c, l1, l2, 1.0, 1000, HP=0)
+
+
+# --------------------------------------------------------------------------- factorisation winding
+def test_wake_factorisation_winding_and_contour_independence():
+    """At omega = 5 the wake kernel winds once round 0 along the factorisation
+    contour; with the automatic W correction K+ / K- no longer depend on the
+    contour (with the original W = 0 they differed by factors of ~2)."""
+    from shear_flow_scattering.scripts.trailing_edge import _wake_factorisation
+    U, c, om = profiles.u_parabolic(0.3, 1, 1), profiles.c_const(5.0), 5.0
+    kp, km = np.array([1 + 4j]), np.array([2 - 4j])
+    vals = []
+    for fc in ((0, 1, -1, 1), (0, 2, -0.5, 0.5)):
+        C, dC = contours.tanh_contour(*fc)
+        K = _wake_factorisation(0.0, om, U, c, 1.0, U, c, 1.0, np.inf, 300,
+                                Struct(Cp=C, dCp=dC, Cm=C, dCm=dC), 1500, 3 * np.pi / 2)
+        assert K.W == 1
+        vals.append((K.p(kp)[0], K.m(km)[0]))
+    assert np.allclose(vals[0], vals[1], rtol=1e-3)
+
+
+def test_non_analytic_profile_flagged_on_complex_path(caplog):
+    from shear_flow_scattering.pridmore_brown import comp_dec_aug18a_skip
+    U = profiles.u_pw_parabolic([0.6, 0.7, 1], [0, 0.1, 1])
+    assert U.analytic is False and profiles.u_power(0.3, 1, 1, 3).analytic
+    comp_dec_aug18a_skip(np.array([3 + 1j]), 0.0, 5.0, U, profiles.c_const(5), 1.0, 50,
+                         contours.straight_path(1.0, 0.0))
+    assert "not analytic" not in caplog.text            # real path: fine
+    comp_dec_aug18a_skip(np.array([3 + 1j]), 0.0, 5.0, U, profiles.c_const(5), 1.0, 50,
+                         contours.contour_semicircle(1.0, 1))
+    assert "not analytic" in caplog.text                # complex path: warned

@@ -30,7 +30,7 @@ import numpy as np
 
 from .._utils import FIELDS, Struct, log, row
 from ..contours import contour_semicircle, straight_path, tanh_contour
-from ..factorisation import fact_mult_cont_scaled_finite
+from ..factorisation import fact_mult_scaled_auto_winding
 from ..inversion import dispersion_generic_nov2018, fourier_nov2018, y_continuous_scattering
 from ..kernels import (ff_kernel_hardsoft_noslip, ff_kernel_hardsoft_slip, ff_kernel_impedance,
                        impedance_up_down, kernel_generic, kernel_hardsoft)
@@ -56,10 +56,11 @@ def _hardsoft_kernel(k3, omega, U, c, delta, N_bl, contour, prec_N, branch_cut):
     z_kernel = contour_semicircle(delta, 1)  # so the branch cut is in the LHP
     Kernel = lambda k1: kernel_hardsoft(k1, k3, omega, U, c, delta, N_bl, z_kernel)
     if U.f(0) != 0:
-        Kff = ff_kernel_hardsoft_slip(omega, U.f(0), c.f(0), k3, 0)
+        Kff = lambda W: ff_kernel_hardsoft_slip(omega, U.f(0), c.f(0), k3, W)
     else:
-        Kff = ff_kernel_hardsoft_noslip(omega, U.df(0), c.f(0), k3, 0)
-    K = fact_mult_cont_scaled_finite(Kernel, Kff, contour, Struct(N=prec_N), branch_cut)
+        Kff = lambda W: ff_kernel_hardsoft_noslip(omega, U.df(0), c.f(0), k3, W)
+    # winding chosen automatically (the original always used W = 0)
+    K = fact_mult_scaled_auto_winding(Kernel, Kff, contour, Struct(N=prec_N), branch_cut)
     return Kernel, K
 
 
@@ -343,8 +344,8 @@ def _impedance_kernel(Zu, Zd, k3, omega, U, c, delta, N_bl, contour, prec_N):
     Lu, Ld = impedance_up_down(Zu, Zd, omega, U.f(0), U.df(0))
     z_kernel = contour_semicircle(delta, 1)
     Kernel = lambda k1: kernel_generic(k1, k3, omega, U, c, delta, Lu, Ld, N_bl, z_kernel)
-    Kff = ff_kernel_impedance(Zu, Zd, omega, U.f(0), c.f(0), k3, 0)
-    return Lu, Ld, fact_mult_cont_scaled_finite(Kernel, Kff, contour, Struct(N=prec_N), np.pi)
+    Kff = lambda W: ff_kernel_impedance(Zu, Zd, omega, U.f(0), c.f(0), k3, W)
+    return Lu, Ld, fact_mult_scaled_auto_winding(Kernel, Kff, contour, Struct(N=prec_N), np.pi)
 
 
 def imp_imp_continuous(Zu=1 - 1j, Zd=2 * (1 - 1j), U=None, c=None, delta=1.0, omega=1.0,

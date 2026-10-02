@@ -230,6 +230,59 @@ Each fix is also flagged in the relevant docstring.
   `FarField_TrailingEdge_Lined` use `-1`. The moduli agree, so `|p_w|` is
   unaffected; the phases are conjugated.
 
+* **Wiener-Hopf winding number (`W = 0` everywhere).** The far-field kernel
+  factors (`FFKernel_*`, `FFWake_Kernel`) take an integer `W` to cancel the
+  winding of `K/Kff` round 0 along the factorisation contour, but every script
+  passes `W = 0`. For the trailing edge at `omega = 5` (default flow), `K/Kff`
+  winds once, so `log(K/Kff)` jumps across its branch cut. The factorisation
+  is then wrong, and also contour-dependent: four tanh contours gave `K+`
+  differing by factors of about 2. The port measures the winding and picks
+  `W` automatically (`factorisation.fact_mult_scaled_auto_winding`; at
+  `omega = 1`, as in Fig. 6.2.2, the winding is 0). Afterwards the results
+  agree across contours to 5 digits, and the far field matches direct
+  near-field inversion to < 1%.
+* **Factorisation contour below unstable wake modes.** Zeros of `D_w` (wake
+  modes) propagate downstream, so by Briggs-Bers they must lie below the
+  factorisation contour. The original's fixed tanh contour (height 1) passes
+  *under* the unstable wake mode once it rises above `Im k1 = 1`. At
+  `omega = 5` that happens for wall shear `U'(0) >= 3.5`, e.g. a mode at
+  `8.42 + 1.02i` for `u_power(0.3, 1, 1, 5)`. The factorisation is then
+  wrong, giving results about 15 dB too quiet with a flattened directivity.
+  The trailing-edge code now chooses the contour height automatically
+  (`trailing_edge._wake_contour`: the lowest height whose winding matches
+  that of the tallest, so no wake mode lies above it). Contours of height 2–4
+  then agree to 4–5 digits. The hard→soft and impedance scripts still use the
+  fixed height-1 contour, which is adequate at `omega = 1` (their defaults) but
+  should get the same treatment before being used at higher frequency or
+  shear.
+* **Veitch contour in `FarField_TrailingEdge_Lined.m`.** The factorisation
+  contour is centred on the requested saddle points, so the answer depends on
+  which observer angles are asked for. For a single angle (as in
+  `WallPressure_PointSource_FarField.m`, used for paper Fig. 8) it
+  is wrong even after the winding fix (0.379 vs 0.101). The port defaults to
+  the tanh contour (`factor_contour="tanh"`).
+
+  Combined with the winding issue, the original under-estimates the paper's
+  Fig. 6 amplitudes by 4–10× at `c0 = 5` and up to about 80× at `c0 = 50`,
+  with angle-dependent errors that also distort the directivity. Paper
+  Fig. 8's far field is off by −11 to +13 dB, depending on frequency.
+* **Non-analytic profiles on complex paths.** `Struct_U_PWParabolic` (the
+  two-piece "base"/"sheared" profiles of paper Fig. 5, used in Figs 8–9) is
+  piecewise in `Re x2`, so it is not analytic. The semicircular paths used to
+  step round the critical layer are then invalid: `D_h` from a straight path
+  and from a semicircle differ by O(1) for k1 off the real axis, where they
+  must agree; for parabolic and cubic profiles they agree to 1e-12. Piecewise
+  profiles are now flagged (`Profile.analytic = False`) and warn when they meet
+  a complex path. To use them, integrate along the real axis with only a small
+  local indentation round the critical point (not yet implemented), or use an
+  analytic profile of similar shape (e.g. `profiles.u_power`).
+* **Far-field normalisation.** The far-field scripts output `K sin(Theta) Y`
+  at the saddle and omit `1/(2 pi)`, `sqrt(pi/(R K0))` and the Mach-stretched
+  distance. That is fine within one Mach number, but not across them. The
+  physical amplitude is
+  `lim r^(1/2)|p'| = |FF| sqrt(K0/(2 pi)) (cos^2 theta + beta^2 sin^2 theta)^(-1/4)`,
+  checked against near-field inversion (see `examples/sec42_studies.py`).
+
 ## Distributed sources: the `weighting` toggle
 
 `distributed_trailing_edge`, `rerun_with_vorticity` and

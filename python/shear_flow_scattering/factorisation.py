@@ -21,7 +21,7 @@ from typing import Callable
 
 import numpy as np
 
-from ._utils import Struct, heaviside
+from ._utils import Struct, heaviside, log
 from .complex_funcs import log_a, log_curved_branch
 from .quadrature import lgwt
 
@@ -172,6 +172,53 @@ def fact_mult_cont_scaled_finite(G, Gff, contour, prec, branch_cut) -> Struct:
     """``Fact_Mult_Cont_Scaled_Finite.m`` -- the version every scattering
     script uses."""
     return _scaled(G, Gff, contour, prec, branch_cut, fact_mult_cont_finite)
+
+
+def winding_number(G: Callable, C: Callable, t_max=200.0, n=20001) -> int:
+    """Winding number of ``G`` round 0 along the contour ``z = C(t)``,
+    ``t in [-t_max, t_max]`` (unwrapped change of ``arg G`` over ``2 pi``).
+
+    Multiplicative factorisation of ``G -> 1`` needs this to be zero: otherwise
+    ``log G`` cannot be continuous along the contour and the Cauchy split is
+    wrong *and* contour-dependent.  The kernels' far-field factors take an
+    integer ``W`` to cancel it (see :func:`.kernels.ff_wake_kernel`).
+    """
+    t = np.sinh(np.linspace(-np.arcsinh(t_max), np.arcsinh(t_max), n))  # dense near 0
+    g = G(C(t))
+    g = g[np.isfinite(g)]  # the kernel can overflow at very large |k1|
+    ph = np.unwrap(np.angle(g))
+    return int(np.round((ph[-1] - ph[0]) / (2 * np.pi)))
+
+
+def fact_mult_scaled_auto_winding(G: Callable, Gff_of_W: Callable, contour: Struct, prec: Struct,
+                                  branch_cut, W="auto", max_W=3) -> Struct:
+    """:func:`fact_mult_cont_scaled_finite` with the far-field winding chosen
+    automatically.
+
+    ``Gff_of_W(W)`` builds the analytic far-field factorisation with integer
+    winding correction ``W`` (every ``FFKernel_*`` / ``FFWake_Kernel`` takes
+    one).  The original scripts always used ``W = 0``.  When ``G/Gff`` winds
+    round 0 along the contour, that makes ``log(G/Gff)`` discontinuous and the
+    result wrong and contour-dependent.  Here ``W`` is chosen, by measurement
+    along ``contour.Cp``, so that ``G/Gff`` has zero winding; an error is raised
+    if no ``|W| <= max_W`` achieves this.  Returns the factorised Struct with
+    the chosen ``W`` attached.
+    """
+    if W == "auto":
+        wind = lambda w: winding_number(lambda k: G(k) / Gff_of_W(w).f(k), contour.Cp)
+        n = wind(0)
+        W = 0
+        if n:
+            for cand in sorted({-n, n, *range(-max_W, max_W + 1)}, key=abs):
+                if wind(cand) == 0:
+                    W = cand
+                    break
+            else:
+                raise RuntimeError(f"cannot cancel winding number {n} of G/Gff with |W| <= {max_W}")
+            log.info("G/Gff winds %d times along the factorisation contour; using W = %d", n, W)
+    out = fact_mult_cont_scaled_finite(G, Gff_of_W(W), contour, prec, branch_cut)
+    out.W = W
+    return out
 
 
 def add_fact_b(F, C, dC, N1, N2, N3, t1, t2):
