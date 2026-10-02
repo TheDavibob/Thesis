@@ -174,7 +174,11 @@ def fact_mult_cont_scaled_finite(G, Gff, contour, prec, branch_cut) -> Struct:
     return _scaled(G, Gff, contour, prec, branch_cut, fact_mult_cont_finite)
 
 
-def winding_number(G: Callable, C: Callable, t_max=200.0, n=20001) -> int:
+#: Samples used by :func:`winding_number` (the kernel is evaluated at each).
+WINDING_SAMPLES = 8001
+
+
+def winding_number(G: Callable, C: Callable, t_max=200.0, n=None) -> int:
     """Winding number of ``G`` round 0 along the contour ``z = C(t)``,
     ``t in [-t_max, t_max]`` (unwrapped change of ``arg G`` over ``2 pi``).
 
@@ -183,6 +187,7 @@ def winding_number(G: Callable, C: Callable, t_max=200.0, n=20001) -> int:
     wrong *and* contour-dependent.  The kernels' far-field factors take an
     integer ``W`` to cancel it (see :func:`.kernels.ff_wake_kernel`).
     """
+    n = WINDING_SAMPLES if n is None else n
     t = np.sinh(np.linspace(-np.arcsinh(t_max), np.arcsinh(t_max), n))  # dense near 0
     g = G(C(t))
     g = g[np.isfinite(g)]  # the kernel can overflow at very large |k1|

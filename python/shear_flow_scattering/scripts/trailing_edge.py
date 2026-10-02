@@ -98,12 +98,20 @@ def _wake_contour(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl, heights=(1
     z1, z2 = contour_semicircle(deltap, 1), contour_semicircle(deltam, 1)
     Kernel = lambda k1: wake_kernel(k1, k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl, z1, z2)
     Kff = ff_wake_kernel(k3, omega, Up.f(0), cp.f(0), Up.df(0), -Um.df(0), Z, 0)
-    winds = [winding_number(lambda k: Kernel(k) / Kff.f(k), tanh_contour(0, b, -1, 1)[0])
-             for b in heights]
-    b = next(b for b, w in zip(heights, winds) if w == winds[-1])
+    wind = {}
+
+    def w(h):
+        if h not in wind:
+            wind[h] = winding_number(lambda k: Kernel(k) / Kff.f(k), tanh_contour(0, h, -1, 1)[0])
+        return wind[h]
+
+    target = w(heights[-1])
+    b = heights[0] if w(heights[0]) == target else next(h for h in heights[1:] if w(h) == target)
     if b != heights[0]:
         log.info("wake mode(s) above the height-%g contour; using height %g", heights[0], b)
-    return tanh_factor_contour(b)
+    ct = tanh_factor_contour(b)
+    ct.winding = w(b)        # winding of K/Kff(W=0) along it: W = -winding cancels it
+    return ct
 
 
 def tanh_factor_contour(height, x0=0.0) -> Struct:
@@ -202,7 +210,7 @@ def _te_setup(Up, cp, deltap, Um, cm, deltam, omega, Z, k3, x1, x2, N_bl, N_C, a
 
     contour = _wake_contour(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl)
     st.K = K = _wake_factorisation(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl,
-                                   contour, prec_N, branch_cut)
+                                   contour, prec_N, branch_cut, -contour.winding)
     st.Kf = Struct(p1=K.p(st.Cp1.k), m1=K.m(st.Cm1.k), p2=K.p(st.Cp2.k), m2=K.m(st.Cm2.k),
                    CLp=K.m(st.C_CLp.k), CLm=K.m(st.C_CLm.k), modes=K.m(st.zeros_wake_m))
     log.info("Kernel found and factorised")
@@ -329,7 +337,7 @@ def far_field_trailing_edge_lined(U0=0.3, Uinfp=1.0, Uinfm=1.0, deltap=1.0, delt
                                   branch_cut=3 * np.pi / 2, shift_y2=0.001, Up=None, Um=None,
                                   cp=None, cm=None, theta1=None, theta2=None, kappa1=None,
                                   pressure_upstream=None, incident="regularised",
-                                  factor_contour="tanh"):
+                                  factor_contour="tanh", winding="auto"):
     """``FarField_TrailingEdge_Lined.m`` -- far-field directivity of the
     trailing-edge problem ("Only really optimised for hard-wall").
 
@@ -337,6 +345,10 @@ def far_field_trailing_edge_lined(U0=0.3, Uinfp=1.0, Uinfm=1.0, deltap=1.0, delt
        (``%U0 = 0.3;``) yet used to build the profiles, so the script only ran
        with ``U0`` already in the workspace.  It defaults to 0.3 here (the
        value in the commented line).
+
+    ``winding="auto"`` cancels the winding of ``K/Kff`` along the factorisation
+    contour; ``winding=0`` with ``factor_contour="veitch"`` reproduces the
+    original (incorrect) computation.
 
     ``kappa1`` may be an array (one forcing wavenumber per source height, as in
     ``WallPressure_PointSource_FarField.m``); results then gain a trailing
@@ -368,13 +380,17 @@ def far_field_trailing_edge_lined(U0=0.3, Uinfp=1.0, Uinfm=1.0, deltap=1.0, delt
     elif factor_contour == "tanh":
         # height chosen to pass above all wake modes; two crossing points so that
         # no saddle point is evaluated near a contour (see _TwoContourFactors)
-        h = _wake_contour(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl).height
+        wc = _wake_contour(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl)
+        h = wc.height
+        if winding == "auto":
+            winding = -wc.winding    # same height, so the same winding (no zeros between)
         kb1p, kb2p = branch_points(omega, Up.f(deltap), cp.f(deltap), k3)
         kb1m, kb2m = branch_points(omega, Um.f(deltam), cm.f(deltam), k3)
         lo, hi = max(np.real(kb2p), np.real(kb2m)), min(np.real(kb1p), np.real(kb1m))
         xa, xb = lo + 0.3 * (hi - lo), lo + 0.7 * (hi - lo)
         Ka, Kb = (_wake_factorisation(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl,
-                                      tanh_factor_contour(h, x), prec_N, branch_cut) for x in (xa, xb))
+                                      tanh_factor_contour(h, x), prec_N, branch_cut, winding)
+                  for x in (xa, xb))
         K = _TwoContourFactors(Ka, Kb, xa, xb)
     elif isinstance(factor_contour, tuple):
         Cp, dCp = tanh_contour(*factor_contour)
@@ -383,7 +399,7 @@ def far_field_trailing_edge_lined(U0=0.3, Uinfp=1.0, Uinfm=1.0, deltap=1.0, delt
         raise ValueError("factor_contour must be 'veitch', 'tanh' or a tanh tuple")
     if factor_contour != "tanh":
         K = _wake_factorisation(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl,
-                                Struct(Cp=Cp, dCp=dCp, Cm=Cm, dCm=dCm), prec_N, branch_cut)
+                                Struct(Cp=Cp, dCp=dCp, Cm=Cm, dCm=dCm), prec_N, branch_cut, winding)
     Km_kappa1 = K.m(kappa1)
 
     if pressure_upstream is None:

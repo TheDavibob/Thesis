@@ -40,6 +40,7 @@ import numpy as np
 
 from ._utils import Path, Struct, log, row
 from .complex_funcs import sqrt_a
+from .contours import indented_path, semiellipse_path
 from .ivp import (fixed_step_ivp, fixed_step_ivp_gridx, fixed_step_ivp_gridx_skip,
                   fixed_step_ivp_skip)
 
@@ -267,22 +268,147 @@ def hard_aug18a_gridx_skip(x2_max, k1, k3, omega, U, c, delta, N):
 # ==========================================================================
 # Complex-path solvers (FixedStep/PridmoreBrown/Complex_Contour/*.m)
 # ==========================================================================
-_warned_nonanalytic = set()
+def critical_point(U, omega, k1, lo, hi, n_grid=2001, newton=4):
+    """Complex critical point ``x_c`` with ``U(x_c) = omega / k1`` near
+    ``[lo, hi]`` (one per ``k1``; NaN where ``Re(omega/k1)`` is outside the
+    range of ``U``).  Assumes ``U`` monotonic on the interval: a real estimate
+    by interpolation, then Newton steps in the complex plane."""
+    k1 = np.atleast_1d(np.asarray(k1, dtype=complex))
+    target = omega / k1
+    xg = np.linspace(min(lo, hi), max(lo, hi), n_grid)
+    Ug = np.real(U.f(xg))
+    order = np.argsort(Ug)
+    inside = (np.real(target) > Ug.min()) & (np.real(target) < Ug.max())
+    x = np.interp(np.real(target), Ug[order], xg[order]).astype(complex)
+    for _ in range(newton):
+        x = x - (U.f(x) - target) / U.df(x)
+    return np.where(inside, x, np.nan + 0j)
 
 
-def _check_path(U, z):
-    """Warn (once per profile) if a non-analytic profile meets a complex path."""
-    if getattr(U, "analytic", True) or id(U) in _warned_nonanalytic:
-        return
-    s = np.linspace(0, 1, 5)
-    if np.any(np.abs(np.imag(z.f(s))) > 1e-12):
-        _warned_nonanalytic.add(id(U))
-        log.warning("profile is not analytic in complex x2 (piecewise), but the integration "
-                    "path leaves the real axis: results are invalid. Use a real path.")
+def _indent_for_nonanalytic(U, z: Path, k1, omega, radius=0.05, clearance=0.05):
+    """Replace a complex (semicircular) path by a real-axis path between the
+    same end points, lifted smoothly over each element's critical point on the
+    same side as the original path (:func:`.contours.indented_path`).
+
+    The lift is only applied where the critical point is within ``clearance``
+    of the real segment or on the wrong side of it; its radius grows if the critical point is
+    further off the axis, but is capped to stay inside one analytic piece
+    (``U.breaks``) and away from the end points.
+    """
+    ends = [np.real(z.f(si)) for si in (0.0, 1.0)]
+    hp = np.sign(np.imag(z.f(0.5)))
+    hp = np.where(hp == 0, 1.0, hp)
+    a, b = np.broadcast_arrays(ends[0], ends[1], np.empty(np.size(k1)))[:2]
+    lo, hi = np.minimum(a, b), np.maximum(a, b)
+    xc = critical_point(U, omega, k1, float(np.min(lo)), float(np.max(hi)))
+    xr, xi = np.real(xc), np.imag(xc)
+    # lift only where the straight segment would pass within `clearance` of the
+    # critical point, or on the wrong side of it (squeezing a bump against an end
+    # point for a critical point already safely off the axis loses accuracy)
+    near = np.isfinite(xr) & (xr > lo) & (xr < hi) & (hp * xi > -clearance)
+    gaps = [np.abs(xr - lo), np.abs(hi - xr)] + [np.abs(xr - br) for br in getattr(U, "breaks", ())]
+    r_cap = 0.45 * np.min(np.vstack(gaps), axis=0)
+    r = np.minimum(np.maximum(radius, 1.25 * np.maximum(hp * np.nan_to_num(xi), 0)), r_cap)
+    bad = near & (r <= hp * xi)
+    if bad.any():
+        log.warning("%d critical point(s) cannot be passed on the requested side within one "
+                    "analytic piece; results there are unreliable", int(bad.sum()))
+    r = np.where(near, r, 0.0)
+    return indented_path(a, b, np.nan_to_num(xr), hp, r)
+
+
+def spurious_critical_points(U, omega, k1, a, b, half_plane, height, eps=0.02, nb=200):
+    """Number of roots of ``U(z) = omega/k1`` strictly inside the region swept by
+    the half-ellipse from ``a`` to ``b`` of the given ``height`` (excluding a
+    strip ``|Im z| < eps`` round the real axis, where the physical critical
+    point lives).  Argument principle on the region boundary; vectorised over
+    elements (``k1``, ``a``, ``b``, ``height`` broadcast together)."""
+    k1, a, b, height = np.broadcast_arrays(np.asarray(k1, dtype=complex), *(np.asarray(v, dtype=float)
+                                                                            for v in (a, b, height)))
+    I = 1.0 if half_plane > 0 else -1.0
+    m, r = (a + b) / 2, np.abs(a - b) / 2
+    ok = height > eps
+    yb = np.where(ok, eps, 0.5 * height)                    # inner boundary height
+    th0 = np.arcsin(np.clip(yb / np.where(height > 0, height, 1), 0, 1))
+    t = np.linspace(0, 1, nb)[:, None]
+    th = th0 + (np.pi - 2 * th0) * t                         # arc, right to left
+    arc = m + r * np.cos(th) + 1j * I * height * np.sin(th)
+    darc = (np.pi - 2 * th0) * (-r * np.sin(th) + 1j * I * height * np.cos(th))
+    xl, xr = m - r * np.cos(th0), m + r * np.cos(th0)
+    seg = xl + (xr - xl) * t + 1j * I * yb                   # inner segment, left to right
+    dseg = (xr - xl) * np.ones_like(t)
+    u = omega / k1
+    g = lambda z: U.df(z) / (U.f(z) - u)
+    tw = np.full(nb, 1.0 / (nb - 1)); tw[[0, -1]] *= 0.5     # trapezium weights
+    total = (tw[:, None] * (g(seg) * dseg + g(arc) * darc)).sum(axis=0) / (2j * np.pi)
+    total = np.where(np.isfinite(total), total, 0)          # k1 = 0: no critical point at all
+    return np.where(ok, np.round(I * total.real).astype(int), 0)   # orientation: CCW for I = +1
+
+
+def _safe_ellipse(U, z: Path, k1, omega, fractions=(1.0, 0.7, 0.5, 0.35, 0.25, 0.18, 0.12)):
+    """Semi-ellipse with the same end points and side as the semicircle ``z``,
+    as tall as possible (up to the semicircle itself) while staying clear of
+    every spurious critical point (none within a 25 %-taller ellipse).  Identical to ``z`` for profiles without such
+    points (parabolic, cubic, power law)."""
+    a, b = (np.real(z.f(si)) for si in (0.0, 1.0))
+    I = 1.0 if np.all(np.imag(z.f(0.5)) >= 0) else -1.0
+    a, b, _ = np.broadcast_arrays(a, b, np.empty(np.size(k1)))
+    full = np.abs(a - b) / 2
+    H = np.zeros(np.size(k1))
+    todo = np.ones(np.size(k1), bool)
+    for frac in fractions:
+        if not todo.any():
+            break
+        # safety margin: no spurious root within a 25 % taller (+0.03) ellipse, so
+        # the chosen path also stays clear of roots lying just outside it
+        n = spurious_critical_points(U, omega, np.ravel(k1)[todo], a[todo], b[todo], I,
+                                     1.25 * frac * full[todo] + 0.03)
+        good = n == 0
+        idx = np.where(todo)[0][good]
+        H[idx] = (frac * full)[idx]
+        todo[idx] = False
+    if todo.any():
+        log.warning("%d path(s): spurious critical points even inside a flat ellipse; using it anyway",
+                    int(todo.sum()))
+        H[todo] = fractions[-1] * full[todo]
+    if np.all(H == full):
+        return z                                             # nothing to change
+    return semiellipse_path(a, b, I, H)
+
+
+def _is_complex_path(z: Path) -> bool:
+    """Whether the path leaves the real axis (scalar samples, so per-element
+    vectorised paths work too)."""
+    return any(np.any(np.abs(np.imag(z.f(si))) > 1e-12) for si in (0.25, 0.5, 0.75))
+
+
+def _prepare_path(U, z: Path, k1, omega) -> Path:
+    """Make a complex (semicircular) integration path safe for profile ``U``.
+
+    The original code deforms the boundary-layer integration onto a semicircle
+    of radius delta/2 to step round the critical layer.  That is only
+    equivalent to the real path if no *other* root of ``U(z) = omega/k1``
+    lies between them:
+
+    * analytic profiles -- true for parabolic, cubic and power-law profiles,
+      but not for higher-degree polynomials (a degree-8 fit to the paper's
+      profiles has spurious critical points near 0.39 +- 0.43i, giving O(1)
+      errors).  The semicircle is flattened into a semi-ellipse just enough to
+      exclude them (:func:`_safe_ellipse`); otherwise it is left unchanged.
+    * piecewise profiles -- never valid; replaced by a real-axis path lifted
+      locally over the critical point (:func:`_indent_for_nonanalytic`).
+    """
+    if not _is_complex_path(z):
+        return z
+    if getattr(U, "analytic", True):
+        return _safe_ellipse(U, z, k1, omega)
+    return _indent_for_nonanalytic(U, z, k1, omega)
 
 
 def _comp_full(k1, k3, omega, U, c, N, z, ic):
-    _check_path(U, z)
+    if not getattr(U, "analytic", True) and _is_complex_path(z):
+        raise NotImplementedError("full-profile output along a complex path needs an analytic "
+                                  "profile; use the _skip solvers or profiles.fit_analytic")
     k1 = row(k1)
     f = lambda s, phi, k: comp_ode_fun_pb(s, phi, k, omega, c, U, k3, z)
     phi1, s = fixed_step_ivp(f, ic, 1.0, N, k1)
@@ -294,8 +420,8 @@ def _comp_full(k1, k3, omega, U, c, N, z, ic):
 
 
 def _comp_skip(k1, k3, omega, U, c, N, z, ic):
-    _check_path(U, z)
     k1 = row(k1)
+    z = _prepare_path(U, z, k1, omega)
     f = lambda s, phi, k: comp_ode_fun_pb(s, phi, k, omega, c, U, k3, z)
     phi1 = fixed_step_ivp_skip(f, ic, 1.0, N, k1)
     z1 = z.f(1.0)

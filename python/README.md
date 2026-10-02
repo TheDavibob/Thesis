@@ -266,16 +266,45 @@ Each fix is also flagged in the relevant docstring.
   Fig. 6 amplitudes by 4–10× at `c0 = 5` and up to about 80× at `c0 = 50`,
   with angle-dependent errors that also distort the directivity. Paper
   Fig. 8's far field is off by −11 to +13 dB, depending on frequency.
-* **Non-analytic profiles on complex paths.** `Struct_U_PWParabolic` (the
-  two-piece "base"/"sheared" profiles of paper Fig. 5, used in Figs 8–9) is
-  piecewise in `Re x2`, so it is not analytic. The semicircular paths used to
-  step round the critical layer are then invalid: `D_h` from a straight path
-  and from a semicircle differ by O(1) for k1 off the real axis, where they
-  must agree; for parabolic and cubic profiles they agree to 1e-12. Piecewise
-  profiles are now flagged (`Profile.analytic = False`) and warn when they meet
-  a complex path. To use them, integrate along the real axis with only a small
-  local indentation round the critical point (not yet implemented), or use an
-  analytic profile of similar shape (e.g. `profiles.u_power`).
+* **Complex integration paths need care: non-analytic profiles and
+  spurious critical points.** The semicircular paths (radius `delta/2`) that
+  step round the critical layer are only equivalent to the real path if no
+  *other* root of `U(z) = omega/k1` lies between them.
+  * `Struct_U_PWParabolic` (the two-piece "base"/"sheared" profiles of paper
+    Fig. 5, used in Figs 8–9) is piecewise in `Re x2`, so it is not analytic
+    at all. There `D_h` from a straight path and from a semicircle differ by
+    O(1) where they must agree.
+  * Higher-degree polynomials have spurious complex critical points. A
+    degree-8 fit has one near `0.39 +- 0.43i`, inside the semicircle, giving
+    O(1) errors. Parabolic, cubic and power-law profiles have none.
+
+  The solvers now make every complex path safe automatically
+  (`pridmore_brown._prepare_path`):
+  * **Analytic profiles:** the semicircle is flattened into a semi-ellipse
+    just enough to stay clear of spurious critical points. Each wavenumber is
+    checked with an argument-principle count, with a safety margin.
+    Otherwise the semicircle is left exactly as it was.
+  * **Piecewise profiles:** the path is replaced by a real-axis path lifted
+    over the physical critical point by a smooth C-infinity bump
+    (`contours.indented_path`), on the same side and within one analytic
+    piece. A semicircular indent with corners loses RK4 accuracy, so the bump
+    must be smooth. Critical points within about two bump radii of the wall
+    or a join cannot be handled this way and are flagged.
+
+  Validated against straight paths at `k1 + i eta` approaching the cut, and
+  against straight paths of 40 000 steps along the factorisation contours
+  (errors of 1e-11 to 2e-3).
+* **Analytic fits to the paper's profiles.** `profiles.fit_analytic` fits
+  `U = Uinf - (Uinf - U0) sum_j b_j (1 - x2)^j` to a target profile. The
+  basis enforces `U(0) = U0`, `U(delta) = Uinf` and `U'(delta) = 0` exactly,
+  and the fit matches `U` and `U'`. At degree 8 the fits to the Fig. 5
+  profiles (`profiles.afshari_profiles`) are monotonic and inflection-free,
+  with max `|dU|` of 0.0012 (base) and 0.0032 (sheared). Off the
+  critical-layer cut they reproduce the two-piece dispersion function to
+  < 1%. On the cut, values differ by 5–40%: critical-layer quantities depend
+  on `U''` at the critical level, which jumps in the two-piece model and is
+  smooth in the fit. This is a modelling sensitivity worth stating in the
+  paper; it is not a numerical error.
 * **Far-field normalisation.** The far-field scripts output `K sin(Theta) Y`
   at the saddle and omit `1/(2 pi)`, `sqrt(pi/(R K0))` and the Mach-stretched
   distance. That is fine within one Mach number, but not across them. The

@@ -364,13 +364,53 @@ def test_wake_factorisation_winding_and_contour_independence():
     assert np.allclose(vals[0], vals[1], rtol=1e-3)
 
 
-def test_non_analytic_profile_flagged_on_complex_path(caplog):
-    from shear_flow_scattering.pridmore_brown import comp_dec_aug18a_skip
-    U = profiles.u_pw_parabolic([0.6, 0.7, 1], [0, 0.1, 1])
-    assert U.analytic is False and profiles.u_power(0.3, 1, 1, 3).analytic
-    comp_dec_aug18a_skip(np.array([3 + 1j]), 0.0, 5.0, U, profiles.c_const(5), 1.0, 50,
-                         contours.straight_path(1.0, 0.0))
-    assert "not analytic" not in caplog.text            # real path: fine
-    comp_dec_aug18a_skip(np.array([3 + 1j]), 0.0, 5.0, U, profiles.c_const(5), 1.0, 50,
-                         contours.contour_semicircle(1.0, 1))
-    assert "not analytic" in caplog.text                # complex path: warned
+# --------------------------------------------------------------------------- non-analytic / fitted profiles
+def test_fit_analytic_matches_afshari_profiles():
+    for T in profiles.afshari_profiles():
+        F = profiles.fit_analytic(T, degree=8)
+        assert F.analytic and F.monotonic and F.inflection_free
+        assert F.fit_max < 4e-3
+        assert np.isclose(F.f(0.0), T.f(0.0)) and np.isclose(F.f(1.0), 1.0) and abs(F.df(1.0)) < 1e-12
+
+
+def test_indented_path_matches_semicircle_for_analytic_profile():
+    """A parabola flagged non-analytic is integrated on the indented real-axis
+    path; it must reproduce the (valid) semicircle result, including on the
+    critical-layer cut."""
+    P = profiles.u_parabolic(0.3, 1, 1)
+    Pna = profiles.Profile(P.f, P.df, P.d2f, analytic=False)
+    c, om = profiles.c_const(5.0), 5.0
+    k = np.array([6.0 + 0j, 9.0, 12.0 + 0.01j, 7.0 - 0.02j, 3 + 1j])
+    for HP in (1, -1):
+        ref = comp_dec_aug18a_skip(k, 0.0, om, P, c, 1.0, 3000, contours.contour_semicircle(1.0, HP)).v
+        ind = comp_dec_aug18a_skip(k, 0.0, om, Pna, c, 1.0, 3000, contours.contour_semicircle(1.0, HP)).v
+        assert np.allclose(ind, ref, rtol=1e-4)
+
+
+def test_two_piece_on_cut_matches_approach_from_above():
+    """For the piecewise profile, the indented on-cut value is the limit of the
+    straight-path value at kappa1 + i eta (eta -> 0+)."""
+    sheared = profiles.afshari_profiles()[1]
+    c, om = profiles.c_const(35.0), 5.0
+    kap = om / np.array([0.6, 0.85])
+    on = comp_dec_aug18a_skip(kap, 0.0, om, sheared, c, 1.0, 6000, contours.contour_semicircle(1.0, 1)).v
+    ab = comp_dec_aug18a_skip(kap + 0.01j, 0.0, om, sheared, c, 1.0, 20000, contours.straight_path(1.0, 0.0)).v
+    assert np.allclose(on, ab, rtol=0.06)   # O(eta) offset at eta = 0.01
+
+
+def test_spurious_critical_points_and_safe_ellipse():
+    """A degree-8 fit has spurious roots of U(z) = omega/k1 inside the radius-1/2
+    semicircle; the path is flattened to avoid them, which restores agreement
+    with the straight path (the semicircle itself gives O(1) errors)."""
+    from shear_flow_scattering.pridmore_brown import spurious_critical_points
+    om = 5.0
+    F = profiles.fit_analytic(profiles.afshari_profiles()[1])
+    P = profiles.u_parabolic(0.3, 1, 1)
+    k = om / np.array([0.6, 0.85]) + 0j
+    assert np.all(spurious_critical_points(P, om, k, 1.0, 0.0, 1, 0.5) == 0)
+    assert np.all(spurious_critical_points(F, om, k, 1.0, 0.0, 1, 0.5) == 1)
+    kk = np.array([5.5 + 1j, 9.0 + 1j])            # critical points off the axis: straight path is exact
+    c = profiles.c_const(5.0)
+    ref = comp_dec_aug18a_skip(kk, 0.0, om, F, c, 1.0, 20000, contours.straight_path(1.0, 0.0)).v
+    v = comp_dec_aug18a_skip(kk, 0.0, om, F, c, 1.0, 3000, contours.contour_semicircle(1.0, 1)).v
+    assert np.allclose(v, ref, rtol=1e-5)

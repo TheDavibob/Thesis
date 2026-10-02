@@ -277,6 +277,20 @@ def semicircle_path(a, b, half_plane) -> Path:
                 df=lambda s: r * sig * 1j * np.pi * np.exp(sig * 1j * np.pi * s))
 
 
+def semiellipse_path(a, b, half_plane, height) -> Path:
+    """Half-ellipse from ``a`` (s=0) to ``b`` (s=1) bulging to ``height`` into
+    the upper (``half_plane > 0``) or lower half-plane.  ``height = |a-b|/2``
+    is :func:`semicircle_path`.  Arrays give one path per element; like the
+    semicircle it leaves and meets the axis vertically.
+    """
+    a = np.asarray(a, dtype=float)
+    b = np.asarray(b, dtype=float)
+    I = np.where(np.asarray(half_plane) > 0, 1.0, -1.0)
+    m, r, H = (a + b) / 2, (a - b) / 2, np.asarray(height, dtype=float)
+    return Path(f=lambda s: m + r * np.cos(np.pi * s) + 1j * I * H * np.sin(np.pi * s),
+                df=lambda s: np.pi * (-r * np.sin(np.pi * s) + 1j * I * H * np.cos(np.pi * s)))
+
+
 def contour_semicircle(delta, HP) -> Path:
     """``Contour_Semicircle.m``: from ``x2 = delta`` to ``0`` via a semicircle
     in the upper (``HP > 0``) or lower (``HP < 0``) half-plane."""
@@ -292,3 +306,46 @@ def path_to(a, b, HP) -> Path:
     ``GenericInversion``.
     """
     return straight_path(a, b) if HP == 0 else semicircle_path(a, b, HP)
+
+
+def indented_path(a, b, xc, half_plane, radius) -> Path:
+    """Real-axis path from ``a`` to ``b`` lifted smoothly over the point ``xc``
+    into the ``half_plane`` (+1 above, -1 below):
+
+        z(x) = x + i * half_plane * radius * B((x - xc) / radius),
+        B(u) = e * exp(-1 / (1 - u^2))  for |u| < 1, else 0,
+
+    so the path passes ``xc`` at height ``radius`` and is real outside
+    ``|x - xc| < radius``.  ``B`` is C-infinity: a semicircular indentation has
+    corners where it meets the axis, and fixed-step RK4 loses its order at each
+    corner (errors of several % near the critical layer).
+
+    All arguments may be arrays (one path per element); ``radius = 0`` gives a
+    straight path.  Used for non-analytic (piecewise) profiles, for which the
+    large semicircles of :func:`semicircle_path` are invalid; the bump stays
+    inside one analytic piece as long as ``radius`` is smaller than the
+    distance from ``xc`` to the nearest join.
+    """
+    a, b, xc, r, hp = np.broadcast_arrays(*(np.asarray(v, dtype=float) for v in
+                                            (a, b, xc, radius, half_plane)))
+    safe_r = np.where(r > 0, r, 1.0)
+
+    def _bump(x):
+        u = np.where(r > 0, (x - xc) / safe_r, 2.0)
+        inside = np.abs(u) < 1
+        w = np.where(inside, 1 - u ** 2, 1.0)
+        B = np.where(inside, np.e * np.exp(-1 / w), 0.0)
+        dB = np.where(inside, B * (-2 * u / w ** 2), 0.0)   # dB/du
+        return B, dB
+
+    def f(s):
+        x = a + (b - a) * s
+        B, _ = _bump(x)
+        return x + 1j * hp * r * B
+
+    def df(s):
+        x = a + (b - a) * s
+        _, dB = _bump(x)
+        return (b - a) * (1 + 1j * hp * dB)
+
+    return Path(f=f, df=df)
