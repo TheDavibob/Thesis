@@ -49,6 +49,10 @@ def tanh_contour_b(a, bm, bp, tm, tp):
     .. warning:: **Bug fixed.**  The original derivative of the ``t < 0`` half
        was ``(bm + a) sech^2(t/tm)/tm``; differentiating
        ``fm = a - (bm - a) tanh(t/tm)`` gives ``-(bm - a) sech^2(t/tm)/tm``.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
     """
     fp = lambda t: a + (bp - a) * np.tanh(t / tp)
     fm = lambda t: a - (bm - a) * np.tanh(t / tm)
@@ -61,7 +65,12 @@ def tanh_contour_b(a, bm, bp, tm, tp):
 
 def gauss_contour(Cinf, H, W):
     """``GaussContour.m``: Gaussian bump through 0 and ``W``, max height ``H``,
-    tending to ``Cinf < 0`` (imaginary part) at both ends."""
+    tending to ``Cinf < 0`` (imaginary part) at both ends.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
+    """
     sigma2 = np.log((Cinf - H) / Cinf) / (W / 2) ** 2
     t0 = W / 2
     g = lambda t: Cinf + (H - Cinf) * np.exp(-sigma2 * (t - t0) ** 2)
@@ -74,6 +83,10 @@ def ellipse_contour(H, W):
 
     .. warning:: **Bug fixed.**  The original had ``dCp = 1 + dg`` (missing
        the factor ``1i``) although ``Cp = t + 1i*g``.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
     """
     b = 2 * H / W
     ge = lambda t: np.sqrt(H ** 2 - b ** 2 * (t - W / 2) ** 2 + 0j)
@@ -97,7 +110,12 @@ def veitch_contour(c, D, W):
 
 def veitch_contour_b(Dp, Wp, Dm, Wm):
     """``VeitchContourB.m``: Veitch-Peake contour through 0 with different
-    ``(D, W)`` on either side of the imaginary axis."""
+    ``(D, W)`` on either side of the imaginary axis.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
+    """
     Dp = -Dp  # "so both heights above real axis" (original comment)
     Bp, Ap = 3 * Wp ** 4, 4j * Dp * Wp ** 3
     Bm, Am = 3 * Wm ** 4, 4j * Dm * Wm ** 3
@@ -143,7 +161,12 @@ def inf_to_finite(N):
 
 
 def parabola_3points(zm, z0, zp):
-    """``Parabola_3Points.m``: complex parabola with ``z(-1)=zm, z(0)=z0, z(1)=zp``."""
+    """``Parabola_3Points.m``: complex parabola with ``z(-1)=zm, z(0)=z0, z(1)=zp``.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing calls it except :func:`finite_parabola_3points`, itself unused.
+       Exercised only by ``tests/test_legacy.py``.
+    """
     A = 0.5 * (zm + zp) - z0
     B = 0.5 * (zp - zm)
     return Struct(f=lambda t: A * t ** 2 + B * t + z0,
@@ -176,7 +199,12 @@ def _finite(z, N):
 
 
 def finite_parabola_3points(N, zm, z0, zp):
-    """``Finite_Parabola_3Points.m``: discretised :func:`parabola_3points`."""
+    """``Finite_Parabola_3Points.m``: discretised :func:`parabola_3points`.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
+    """
     return _finite(parabola_3points(zm, z0, zp), N)
 
 
@@ -229,6 +257,10 @@ def cl_ellipse_contour(kinf, k0, a, b):
 
     Elliptical loop round the critical layer ``[kinf, k0]``, parametrised by
     ``t in [-1, 1]``; ``C.U``/``C.dU`` upper half, ``C.L``/``C.dL`` lower.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
     """
     if kinf > k0:
         raise ValueError("End of critical layer must be larger than start")
@@ -275,6 +307,20 @@ def semicircle_path(a, b, half_plane) -> Path:
     sig = I * np.where(r >= 0, 1, -1)
     return Path(f=lambda s: m + r * np.exp(sig * 1j * np.pi * s),
                 df=lambda s: r * sig * 1j * np.pi * np.exp(sig * 1j * np.pi * s))
+
+
+def graded_path(z: Path) -> Path:
+    """``z`` reparametrised by ``s -> (1 - cos(pi s))/2``: the same path, with
+    fixed RK steps clustered quadratically at both ends.
+
+    Critical points approach the ends of a boundary-layer path (the wall, or
+    the edge ``x2 = delta``) as ``k1`` approaches the ends of the
+    critical-layer cut; a uniform step there is too coarse long before the
+    path itself becomes unsuitable.
+    """
+    g = lambda s: 0.5 * (1 - np.cos(np.pi * s))
+    dg = lambda s: 0.5 * np.pi * np.sin(np.pi * s)
+    return Path(f=lambda s: z.f(g(s)), df=lambda s: z.df(g(s)) * dg(s))
 
 
 def semiellipse_path(a, b, half_plane, height) -> Path:

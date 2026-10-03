@@ -217,6 +217,10 @@ def dec_aug18a_gridx_skip(x2_min, k1, k3, omega, U, c, delta, N):
     """``Dec_Aug18A_GridX_skip.m`` -- decaying solution evaluated at ``x2_min``.
 
     Output fields have the shape of ``k1``.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing calls it except :func:`steepest_descent.sep18_integrate_sd`, itself unused.
+       Exercised only by ``tests/test_legacy.py``.
     """
     shape = np.shape(k1)
     K1 = row(k1)
@@ -232,7 +236,12 @@ def dec_aug18a_gridx_skip(x2_min, k1, k3, omega, U, c, delta, N):
 
 
 def hard_aug18a_gridx(x2_max, k1, k3, omega, U, c, N):
-    """``Hard_Aug18A_GridX.m`` -- hard-wall solution up to ``x2_max[k]`` per k1."""
+    """``Hard_Aug18A_GridX.m`` -- hard-wall solution up to ``x2_max[k]`` per k1.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
+    """
     k1 = row(k1)
     x2_max = row(x2_max)
     f = lambda x2, phi, k: ode_fun_pb(x2, phi, k, omega, c, U, k3)
@@ -252,6 +261,10 @@ def hard_aug18a_gridx_skip(x2_max, k1, k3, omega, U, c, delta, N):
     """``Hard_Aug18A_GridX_skip.m`` -- hard-wall solution evaluated at ``x2_max``.
 
     ``delta`` is unused (it was ``~`` in MATLAB) but kept for call compatibility.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing calls it except :func:`steepest_descent.sep18_integrate_sd`, itself unused.
+       Exercised only by ``tests/test_legacy.py``.
     """
     shape = np.shape(k1)
     K1 = row(k1)

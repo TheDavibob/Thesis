@@ -151,7 +151,12 @@ def complete_zero_finder(fun, dfun, x, y, plot=False, min_size=1e-5):
 # Gauss-Legendre box integrals (ZP finder/Zeros)
 # ==========================================================================
 def complex_integral_line(fun, z1, z2, N):
-    """``ComplexIntegral_Line.m`` -- N-point Gauss-Legendre ``int fun dz``, z1 -> z2."""
+    """``ComplexIntegral_Line.m`` -- N-point Gauss-Legendre ``int fun dz``, z1 -> z2.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing calls it except :func:`complex_integral_box`, itself unused.
+       Exercised only by ``tests/test_legacy.py``.
+    """
     s, w = gauss_legendre(N)
     z = (z1 + z2) / 2 + s * (z2 - z1) / 2
     return np.sum(fun(z) * w * (z2 - z1) / 2)
@@ -159,7 +164,12 @@ def complex_integral_line(fun, z1, z2, N):
 
 def complex_integral_box(fun, x, y, Nh, Nv):
     """``ComplexIntegral_Box.m`` -- anticlockwise round a box; ``Nh``/``Nv``
-    points on horizontal/vertical sides."""
+    points on horizontal/vertical sides.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing calls it except :func:`number_zeros_box`, itself unused.
+       Exercised only by ``tests/test_legacy.py``.
+    """
     if np.size(x) != 2 or np.size(y) != 2:
         raise ValueError("Box must be given by two x and y coordinates")
     X, Y = np.sort(x), np.sort(y)
@@ -172,7 +182,12 @@ def complex_integral_box(fun, x, y, Nh, Nv):
 
 def number_zeros_box(fun: Struct, x, y, Nh, Nv, precision):
     """``NumberZeros_Box.m`` -- zero count of analytic ``fun.f`` (with
-    ``fun.df``) in a box, after a Cauchy-theorem analyticity check."""
+    ``fun.df``) in a box, after a Cauchy-theorem analyticity check.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing calls it except :func:`number_zeros_bisection`, itself unused.
+       Exercised only by ``tests/test_legacy.py``.
+    """
     if abs(complex_integral_box(fun.f, x, y, Nh, Nv)) > precision:
         raise ValueError("function is not analytic in the box")
     N2 = complex_integral_box(lambda z: fun.df(z) / (2j * np.pi * fun.f(z)), x, y, Nh, Nv)
@@ -189,6 +204,10 @@ def number_zeros_bisection(fun: Struct, x, y, Nh, Nv, recurse, precision):
     Returns ``(N, Z, sz, X, Y)``: counts per box, box centres, and ``sz``
     (for single-zero boxes, the zero itself via ``oint z f'/f``; if any box
     holds several zeros ``sz`` is just the centres).
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
     """
     fine = 2 ** recurse
     x, y = np.sort(x), np.sort(y)
@@ -249,6 +268,104 @@ def zeros_box(f: Callable, x, y, N=500, prec=1e-2) -> Struct:
     if Z.r + Z.U + Z.L != Z.z:
         log.warning("Zeros don't add up? Possible precision failure")
     return Z
+
+
+# ==========================================================================
+# Sampled argument principle (Delves-Lyness) -- new, not in the MATLAB
+# ==========================================================================
+def _rectangle_boundary(x, y, n):
+    """Anticlockwise samples round ``[x0,x1] x [y0,y1]``, about ``n`` in total,
+    spaced in proportion to edge length; closed (first point repeated)."""
+    corners = np.array(box_contour(x, y))
+    lengths = np.abs(np.diff(corners))
+    pts = []
+    for a, b, L in zip(corners[:-1], corners[1:], lengths):
+        m = max(int(np.ceil(n * L / lengths.sum())), 8)
+        pts.append(a + (b - a) * np.linspace(0, 1, m, endpoint=False))
+    pts.append(corners[:1])
+    return np.concatenate(pts)
+
+
+def _sampled_log(f, z, max_refine=6, max_step=np.pi / 4):
+    """``log f`` along the closed polyline ``z`` with the argument unwrapped,
+    refining any segment over which arg f turns by more than ``max_step``."""
+    w = np.asarray(f(z), dtype=complex)
+    for _ in range(max_refine):
+        dph = np.abs(np.angle(w[1:] / w[:-1]))
+        bad = np.flatnonzero(dph > max_step)
+        if bad.size == 0:
+            break
+        mid = 0.5 * (z[bad] + z[bad + 1])
+        wm = np.asarray(f(mid), dtype=complex)
+        z = np.insert(z, bad + 1, mid)
+        w = np.insert(w, bad + 1, wm)
+    else:
+        log.warning("zeros_in_rectangle: argument still varies rapidly on the boundary")
+    return z, np.log(np.abs(w)) + 1j * np.unwrap(np.angle(w))
+
+
+def zeros_in_rectangle(f: Callable, x, y, n_boundary=400, max_per_box=3, min_size=1e-6,
+                       newton_tol=1e-11, _depth=0):
+    """All zeros of ``f`` in the rectangle ``x[0] < Re z < x[1]``, ``y[0] < Im z < y[1]``.
+
+    ``f`` must be analytic (no poles, no branch cuts) on and inside the
+    rectangle, and accept arrays.  The method samples ``f`` round the
+    boundary only:
+
+    1. the number of zeros ``N`` is the winding of ``f`` (argument principle,
+       from the unwrapped phase -- no derivative needed);
+    2. the power sums ``s_j = (1/2 pi i) oint z^j dlog f`` (``j <= N``) give the
+       zeros as roots of a polynomial (Delves & Lyness 1967), via Newton's
+       identities; rectangles holding more than ``max_per_box`` zeros are
+       quartered first, which keeps that polynomial well conditioned;
+    3. each estimate is polished by Newton's method (finite-difference
+       derivative) and kept if it converged inside the rectangle.
+
+    Each rectangle costs one vectorised call of ``f`` on ~``n_boundary`` points
+    (plus refinement where the phase turns quickly), which suits ``f`` that
+    integrate an ODE for many wavenumbers at once.
+    """
+    x0, x1 = sorted(map(float, x))
+    y0, y1 = sorted(map(float, y))
+    z, L = _sampled_log(f, _rectangle_boundary((x0, x1), (y0, y1), n_boundary))
+    N = int(round((L[-1] - L[0]).imag / (2 * np.pi)))
+    if N <= 0:
+        if N < 0:
+            log.warning("zeros_in_rectangle: negative winding %d in %s x %s (pole or cut inside?)",
+                        N, (x0, x1), (y0, y1))
+        return np.array([], dtype=complex)
+    if N > max_per_box and min(x1 - x0, y1 - y0) > min_size:
+        xm, ym = 0.5 * (x0 + x1), 0.5 * (y0 + y1)
+        kw = dict(n_boundary=n_boundary, max_per_box=max_per_box, min_size=min_size,
+                  newton_tol=newton_tol, _depth=_depth + 1)
+        return np.concatenate([zeros_in_rectangle(f, bx, by, **kw)
+                               for bx in ((x0, xm), (xm, x1)) for by in ((y0, ym), (ym, y1))])
+    # power sums about the centre, scaled to the half-diagonal for conditioning
+    c, r = 0.5 * (x0 + x1) + 0.5j * (y0 + y1), 0.5 * abs((x1 - x0) + 1j * (y1 - y0))
+    w = (z - c) / r
+    dL = np.diff(L)
+    s = [np.sum(0.5 * (w[:-1] ** j + w[1:] ** j) * dL) / (2j * np.pi) for j in range(1, N + 1)]
+    e = [1.0 + 0j]                                   # elementary symmetric polynomials
+    for m in range(1, N + 1):
+        e.append(sum((-1) ** (i - 1) * e[m - i] * s[i - 1] for i in range(1, m + 1)) / m)
+    guesses = c + r * np.roots([(-1) ** m * e[m] for m in range(N + 1)])
+    h = 1e-7 * max(r, 1.0)
+    out = []
+    for z0 in guesses:
+        zk = z0
+        for _ in range(50):
+            fz, fp, fm = (np.asarray(f(np.array([zk, zk + h, zk - h])), dtype=complex))
+            step = fz / ((fp - fm) / (2 * h))
+            zk = zk - step
+            if abs(step) < newton_tol * max(1.0, abs(zk)):
+                break
+        inside = x0 - 1e-9 <= zk.real <= x1 + 1e-9 and y0 - 1e-9 <= zk.imag <= y1 + 1e-9
+        if np.isfinite(zk) and inside and all(abs(zk - q) > 1e-7 * max(1, abs(q)) for q in out):
+            out.append(zk)
+    if len(out) != N:
+        log.warning("zeros_in_rectangle: %d zero(s) counted but %d polished in %s x %s",
+                    N, len(out), (x0, x1), (y0, y1))
+    return np.array(out, dtype=complex)
 
 
 # ==========================================================================
@@ -353,7 +470,12 @@ def poles(f: Callable, p0: Sequence[complex]):
 
 def simple_zero_tracker(f: Callable, p: Sequence, z0, plot=False):
     """``SimpleZeroTracker.m`` -- follow a zero of ``f(z, p)`` as ``p`` varies,
-    using each result as the next guess.  Stops (NaN-filling) on failure."""
+    using each result as the next guess.  Stops (NaN-filling) on failure.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
+    """
     p = np.asarray(p)
     z = np.full(p.shape, np.nan, dtype=complex)
     for j, pj in enumerate(p):
@@ -373,27 +495,47 @@ def simple_zero_tracker(f: Callable, p: Sequence, z0, plot=False):
 # Pointwise (non-vectorised) integrals
 # ==========================================================================
 def pointwise_trapezium(f: Callable, x):
-    """``PointwiseTrapezium.m`` -- trapezium rule for a scalar-only ``f``."""
+    """``PointwiseTrapezium.m`` -- trapezium rule for a scalar-only ``f``.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing calls it except :func:`pointwise_trapezium_box`, itself unused.
+       Exercised only by ``tests/test_legacy.py``.
+    """
     x = np.asarray(x)
     return trapezoid(np.array([f(xi) for xi in x.ravel()]), x.ravel())
 
 
 def pointwise_trapezium_box(f: Callable, x, y):
-    """``PointwiseTrapeziumBox.m`` -- anticlockwise round ``z = x + iy``."""
+    """``PointwiseTrapeziumBox.m`` -- anticlockwise round ``z = x + iy``.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing calls it except :func:`pointwise_zp`, itself unused.
+       Exercised only by ``tests/test_legacy.py``.
+    """
     x, y = np.asarray(x), np.asarray(y)
     return (pointwise_trapezium(f, x + 1j * y[0]) + pointwise_trapezium(f, x[-1] + 1j * y)
             - pointwise_trapezium(f, x + 1j * y[-1]) - pointwise_trapezium(f, x[0] + 1j * y))
 
 
 def pointwise_zp(f: Callable, x, y):
-    """``PointwiseZP.m`` -- zeros minus poles using the pointwise tools."""
+    """``PointwiseZP.m`` -- zeros minus poles using the pointwise tools.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
+    """
     return pointwise_trapezium_box(
         lambda z: pointwise_derivative(f, z) / (2j * np.pi * f(z)), x, y)
 
 
 def pv_trapz(f: Callable, a, b, p, epsilon, N=1000):
     """``PVTrapz.m`` -- principal-value integral of ``f`` over ``[a, b]``,
-    excising ``+-epsilon`` round each pole in ``p`` (brute-force trapezium)."""
+    excising ``+-epsilon`` round each pole in ``p`` (brute-force trapezium).
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
+    """
     p = np.sort(np.atleast_1d(p))
     starts = np.concatenate([[a], p + epsilon])
     ends = np.concatenate([p - epsilon, [b]])
@@ -410,7 +552,12 @@ def pv_trapz(f: Callable, a, b, p, epsilon, N=1000):
 def branch_cut_integral(f: Callable, B, delta):
     """``BranchCutIntegral.m`` -- trapezium integrals along both sides of a
     polyline ``B`` offset by ``+-delta`` normals.  Returns ``(I1, I2)``;
-    ``I1 + I2 ~ 0`` if there is no cut."""
+    ``I1 + I2 ~ 0`` if there is no cut.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
+    """
     B = np.asarray(B, dtype=complex)
     nrm = -1j * (B[1:] - B[:-1])
     nrm = np.append(nrm, nrm[-1])
@@ -435,6 +582,10 @@ def zeros_poles_branch_cuts(fun, dfun, x, y):
     ``BranchCuts`` (to assemble them into polylines), neither of which is in
     the repository.  The original also contains ``numel(B,1)``, which is not
     valid MATLAB for this purpose (``size(B,1)`` was presumably meant).
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
     """
     raise NotImplementedError(
         "ZerosPolesBranchCuts depends on ContourSweep.m and BranchCuts.m, which "

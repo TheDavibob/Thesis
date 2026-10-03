@@ -104,6 +104,97 @@ def _wake_contour(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl, heights=(1
     return ct
 
 
+def sided_dw(ops, k3, omega, Up, cp, deltap, Um, cm, deltam, N_bl, HP):
+    """``D_w = -Dp1 Dh2 - Dp2 Dh1`` (as :func:`_dispersions`) integrated on graded
+    semicircles in half-plane ``HP`` (made safe for the profile first), for
+    accurate values close to the critical-layer cut and its ends."""
+    from ..pridmore_brown import _prepare_path, comp_dec_aug18a_skip
+    from ..contours import graded_path, path_to
+
+    def at_wall(k, U, c, d):
+        z = graded_path(_prepare_path(U, path_to(d, 0.0, HP), k, omega))
+        return comp_dec_aug18a_skip(k, k3, omega, U, c, d, N_bl, z, prepare=False)
+
+    def Dw(k1):
+        k = row(np.asarray(k1, dtype=complex))
+        s1, s2 = at_wall(k, Up, cp, deltap), at_wall(k, Um, cm, deltam)
+        L = lambda op, s: op.l1(k) * s.dphi + op.l2(k) * s.phi
+        out = -L(ops.P, s1) * L(ops.V2, s2) - L(ops.P, s2) * L(ops.V1, s1)
+        return np.reshape(out, np.shape(k1))
+    return Dw
+
+
+def dw_zeros(ops, omega, k3, Up, cp, deltap, Um, cm, deltam, height, margin=None, pad=None,
+             n_boundary=600, N_bl=1500):
+    """All zeros of ``D_w`` with ``Im k1 < height``, searched in rectangles that
+    avoid its branch cuts.
+
+    The cuts are known: each stream's acoustic branch points (``kb1`` with a
+    cut straight down, ``kb2`` straight up; see :func:`branch_points`) and the
+    critical layers ``[omega/U(delta), omega/U(0)]`` on the real axis.  The
+    rectangles are
+
+    * upper half-plane, ``margin < Im k1 < height``: left and right of both
+      upward ``kb2`` cuts;
+    * lower half-plane, ``Im k1 < -margin``: left and right of both downward
+      ``kb1`` cuts, down to the depth the acoustic hyperbolas leave open.
+
+    In each, ``D_w`` is evaluated by :func:`sided_dw`: on a graded semicircular
+    path on the side *away* from the critical point (``HP = sign(Im k1)``).
+    Off the real axis that is the same function as the straight path, but it
+    stays accurate near the critical-layer cut and its ends, where the
+    straight-path (or uniformly stepped) integration is near-singular and
+    throws up spurious zeros.  Not searched: ``|Im k1| < margin`` (default
+    ``0.05 omega``) over the critical layers padded by ``pad`` (default
+    ``0.1 omega``, as the ellipse: zeros there are inside it), ``|Im k1| <
+    1e-3 omega`` elsewhere, and the thin strips between the two streams'
+    branch points.
+    """
+    from ..zeros import zeros_in_rectangle
+    margin = 0.05 * omega if margin is None else margin
+    pad = 0.1 * omega if pad is None else pad
+    kb1p, kb2p = branch_points(omega, Up.f(deltap), cp.f(deltap), k3)
+    kb1m, kb2m = branch_points(omega, Um.f(deltam), cm.f(deltam), k3)
+    kb1 = np.real([kb1p, kb1m]); kb2 = np.real([kb2p, kb2m])
+    U0 = max(min(abs(Up.f(0)), abs(Um.f(0))), 0.1 * min(Up.f(deltap), Um.f(deltam)))
+    X = 1.5 * omega / U0 + 2 * height        # past the end of the critical layers
+    depth = X - kb1.min()                     # the hyperbola arms (45 deg) bound the open region
+    sided = lambda hp: sided_dw(ops, k3, omega, Up, cp, deltap, Um, cm, deltam, N_bl, hp)
+    # critical layers [a, b] (both streams), padded: only there must the search
+    # stay ``margin`` off the axis; elsewhere it comes to within 1e-3 omega
+    a_cl = min(omega / Up.f(deltap), omega / Um.f(deltam)) - pad
+    b_cl = max(omega / U0, omega / Up.f(0) if Up.f(0) else 0, omega / Um.f(0) if Um.f(0) else 0) + pad
+    near = 1e-3 * omega
+    boxes = [((-X, kb2.min() - 1e-3), (near, height), +1), ((-X, kb1.min() - 1e-3), (-depth, -near), -1)]
+    for lo, hp in ((kb2.max() + 1e-3, +1), (kb1.max() + 1e-3, -1)):
+        for x0, x1, m in ((lo, a_cl, near), (max(lo, a_cl), b_cl, margin), (max(lo, b_cl), X, near)):
+            if x1 > x0:
+                boxes.append(((x0, x1), (m, height) if hp > 0 else (-depth, -m), hp))
+    found = [zeros_in_rectangle(sided(hp), bx, by, n_boundary=n_boundary) for bx, by, hp in boxes]
+    z = np.concatenate(found) if found else np.array([], dtype=complex)
+    log.info("D_w zeros found: %s", np.round(z, 4))
+    return z
+
+
+def _swept_modes(zeros, contour, cl, hyperbolas):
+    """The zeros of ``D_w`` swept when the downstream inversion contour (the
+    factorisation contour) is deformed onto the acoustic hyperbolas and the
+    critical-layer ellipse: below the factorisation contour, outside both.
+    Zeros inside the ellipse or a hyperbola are already accounted for by
+    those contour integrals."""
+    keep = []
+    for z in np.atleast_1d(zeros):
+        below = z.imag < np.imag(contour.Cp(np.real(z)))
+        A, B, H = cl
+        in_ellipse = ((z.real - A) / B) ** 2 + (z.imag / H) ** 2 < 1
+        in_hyp = [z.imag < hy(z.real) for hy in hyperbolas]
+        if in_hyp[0] != in_hyp[-1]:
+            log.warning("D_w zero %s lies between the two acoustic hyperbolas", z)
+        if below and not in_ellipse and not any(in_hyp):
+            keep.append(z)
+    return np.array(keep, dtype=complex)
+
+
 def tanh_factor_contour(height, x0=0.0) -> Struct:
     """Tanh factorisation contour of the given height crossing the real axis at ``x0``."""
     Cp, dCp = tanh_contour(0, height, x0 - 1, x0 + 1)
@@ -181,24 +272,41 @@ def _te_setup(Up, cp, deltap, Um, cm, deltam, omega, Z, k3, x1, x2, N_bl, N_C, a
     log.info("Computed x2 dependence")
 
     st.D = D = _dispersions(st.ops, k3, omega, Up, cp, deltap, Um, cm, deltam, N_bl)
-    smol = 1e-12
-    dDw = lambda k1: (D.Dw(k1 + smol, 0) - D.Dw(k1 - smol, 0)) / (2 * smol)
-    # "Assuming, for now, the only modes are in the gLHP and thus only the wake
-    # ones are important."
-    zg = newton_raphson(lambda k1: D.Dw(k1, 0), dDw, mode_guess)
-    st.zeros_wake_m = np.array([zg, np.conj(zg)])
-    st.dDw_wake_m = dDw(st.zeros_wake_m)
+    contour = _wake_contour(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl)
+
+    # Wake modes: every zero of D_w swept by the contour deformation.
+    # **Changed:** the MATLAB took one Newton iteration from ``mode_guess`` (tuned
+    # to the thesis example) and assumed the result and its conjugate were the
+    # only modes.  That returned NaN at omega = 5, missed modes for other flows,
+    # and could land on the end of the critical-layer cut.  ``mode_guess`` is
+    # now ignored.
+    zeros = dw_zeros(st.ops, omega, k3, Up, cp, deltap, Um, cm, deltam, contour.height)
+    a, b = cl_a, (omega / Up.f(0) if Up.f(0) != 0 else 100 * cl_a)
+    hyp = [lambda t, kb=kb: apex + curvature - np.sqrt(curvature ** 2 + np.tan(angle) ** 2 * (t - kb) ** 2)
+           for kb in (np.real(branch_points(omega, Up.f(deltap), cp.f(deltap), k3)[0]),
+                      np.real(branch_points(omega, Um.f(deltam), cm.f(deltam), k3)[0]))]
+    st.zeros_wake_m = _swept_modes(zeros, contour, (0.5 * (a + b), 0.5 * (b - a) + shift1, shift2), hyp)
+    h = 1e-6
+    sides = {hp: sided_dw(st.ops, k3, omega, Up, cp, deltap, Um, cm, deltam, 1500, hp) for hp in (1, -1)}
+    st.dDw_wake_m = np.array([(sides[np.sign(k.imag)](np.array([k + h])) - sides[np.sign(k.imag)](np.array([k - h])))[0]
+                              / (2 * h) for k in st.zeros_wake_m], dtype=complex)
     log.info("Located wake modes %s", st.zeros_wake_m)
 
+    # Downstream integrands: above the wake (on Cm1) needs D_Z2 *on Cm1*, below
+    # (on Cm2) needs D_Z1 *on Cm2*.  **Bug fixed:** TrailingEdge_Lined.m (l. 212-213,
+    # 296-297) evaluated DZ2 on Cm2 and DZ1 on Cm1 and then crossed them over, so
+    # each integrand used the other contour's points.  Invisible for symmetric
+    # flow (Cm1 = Cm2); for U_inf^+ != U_inf^- it broke continuity of p and v across
+    # the wake (0.35% / 1.1% of max|p| at U_inf^- = 1.5) and shifted the whole
+    # near field by about 1%.
     st.Dc = Struct(DZ1p=D.DZ1(st.Cp1.k, 0), DZ2p=D.DZ2(st.Cp2.k, 0),
-                   DZ1m=D.DZ1(st.Cm1.k, 0), DZ2m=D.DZ2(st.Cm2.k, 0),
+                   DZ2_m1=D.DZ2(st.Cm1.k, 0), DZ1_m2=D.DZ1(st.Cm2.k, 0),
                    Dw1m=D.Dw(st.Cm1.k, 0), Dw2m=D.Dw(st.Cm2.k, 0),
                    DZ1_CLp=D.DZ1(st.C_CLp.k, 1), DZ1_CLm=D.DZ1(st.C_CLm.k, -1),
                    DZ2_CLp=D.DZ2(st.C_CLp.k, 1), DZ2_CLm=D.DZ2(st.C_CLm.k, -1),
                    Dw_CLp=D.Dw(st.C_CLp.k, 1), Dw_CLm=D.Dw(st.C_CLm.k, -1))
     log.info("Computed dispersion relationships along integration contours")
 
-    contour = _wake_contour(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl)
     st.K = K = _wake_factorisation(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl,
                                    contour, prec_N, branch_cut, -contour.winding)
     st.Kf = Struct(p1=K.p(st.Cp1.k), m1=K.m(st.Cm1.k), p2=K.p(st.Cp2.k), m2=K.m(st.Cm2.k),
@@ -230,8 +338,8 @@ def _te_assemble(st, cauchy, A, A_upstream, I_upstream_above) -> Struct:
     c_ = lambda C: cauchy(C.k)
     K = Struct(p1=A_upstream * c_(st.Cp1) / (Dc.DZ1p * Kf.p1),
                p2=A_upstream * c_(st.Cp2) / (Dc.DZ2p * Kf.p2),
-               m1=A * c_(st.Cm1) * Dc.DZ2m * Kf.m1 / Dc.Dw1m,
-               m2=A * c_(st.Cm2) * Dc.DZ1m * Kf.m2 / Dc.Dw2m,
+               m1=A * c_(st.Cm1) * Dc.DZ2_m1 * Kf.m1 / Dc.Dw1m,
+               m2=A * c_(st.Cm2) * Dc.DZ1_m2 * Kf.m2 / Dc.Dw2m,
                CLp1=A * c_(st.C_CLp) * Dc.DZ2_CLp * Kf.CLp / Dc.Dw_CLp,
                CLm1=A * c_(st.C_CLm) * Dc.DZ2_CLm * Kf.CLm / Dc.Dw_CLm,
                CLp2=A * c_(st.C_CLp) * Dc.DZ1_CLp * Kf.CLp / Dc.Dw_CLp,
@@ -605,7 +713,12 @@ def wall_pressure_point_source_far_field(Omega, U, y2, cinf=35.0, delta=1.0, k3=
 
 def wall_pressure_point_source_far_field_routine(y2=None, omega=None, cinf=35.0, N_bl=3000):
     """``WallPressure_PointSource_FarField_routine.m`` -- loop the above over
-    frequency for the base and sheared profiles."""
+    frequency for the base and sheared profiles.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
+    """
     y2 = np.linspace(0, 1, 40) if y2 is None else np.asarray(y2)
     omega = np.logspace(-1, 3, 40) if omega is None else np.asarray(omega)
     base, sheared = _study_profiles()

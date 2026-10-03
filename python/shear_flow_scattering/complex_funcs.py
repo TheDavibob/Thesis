@@ -42,7 +42,12 @@ def power_a(x2, power, cut):
 
 
 def power_b(x2, power: Callable, cut):
-    """``PowerB.m`` -- ``x2**power(x2)``: exponent is itself a function."""
+    """``PowerB.m`` -- ``x2**power(x2)``: exponent is itself a function.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
+    """
     return np.exp(power(x2) * log_a(x2, cut))
 
 
@@ -58,7 +63,12 @@ def log_curved_branch(z, f: Callable):
 
 
 def nan_to_zero(f: Callable, x):
-    """``NaN2Zero.m`` -- evaluate ``f(x)`` and replace NaNs by 0."""
+    """``NaN2Zero.m`` -- evaluate ``f(x)`` and replace NaNs by 0.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
+    """
     g = np.array(f(x), dtype=complex)
     g[np.isnan(g)] = 0
     return g
@@ -69,6 +79,10 @@ def log_cts(t, C: Callable, dC: Callable):
 
     Requires ``C(0) = 1``; computed as ``int_0^t C'(eta)/C(eta) d eta`` so it
     is independent of any branch choice (fails if the contour hits 0).
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
     """
     return adaptive_integral(lambda eta: dC(eta) / C(eta), 0.0, t)
 
@@ -79,6 +93,10 @@ def log_cts_f(t, F: Callable, dF: Callable, Cinv: Callable, dCinv: Callable):
     Integrates ``F'(Cinv(eta)) Cinv'(eta) / F(Cinv(eta))`` from ``-inf`` to
     ``t``.  (The MATLAB comment and variable names are ambiguous about whether
     ``Cinv`` is the contour or its inverse; this is a literal port.)
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
     """
     g = lambda eta: dF(Cinv(eta)) * dCinv(eta) / F(Cinv(eta))
     return adaptive_integral(g, -np.inf, t)

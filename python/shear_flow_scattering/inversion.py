@@ -61,7 +61,12 @@ def integral_nov2018(wk, K, X, Y):
 
 
 def integrate_fields(wk, K, X, Y: Struct) -> Struct:
-    """:func:`integral_nov2018` applied to each of ``phi, dphi, p, v``."""
+    """:func:`integral_nov2018` applied to each of ``phi, dphi, p, v``.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
+    """
     return Struct(**{f: integral_nov2018(wk, K, X, Y[f]) for f in FIELDS})
 
 
@@ -161,15 +166,32 @@ y_continuous_scattering_nov2018_mod = y_continuous_scattering_nov2018
 
 
 def y_continuous_scattering_cl_nov2018(x2, k1, k3, omega, U, c, delta, N_bl, I):
+    """``y_continuous_scattering_cl_nov2018`` (thin wrapper).
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
+    """
     return y_continuous_scattering(x2, k1, k3, omega, U, c, delta, N_bl, I, False)
 
 
 def y_continuous_scattering_cl_nov2018_mod(x2, k1, k3, omega, U, c, delta, N_bl, I):
+    """``y_continuous_scattering_cl_nov2018_mod`` (thin wrapper).
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
+    """
     return y_continuous_scattering(x2, k1, k3, omega, U, c, delta, N_bl, I, True)
 
 
 def dirty_dispersion(k1, k3, omega, U, c, delta, N_bl):
-    """``Dirty_Dispersion.m`` -- ``D_p = p(0)`` of the decaying solution (straight path)."""
+    """``Dirty_Dispersion.m`` -- ``D_p = p(0)`` of the decaying solution (straight path).
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
+    """
     return comp_dec_aug18a_skip(k1, k3, omega, U, c, delta, N_bl, straight_path(delta, 0.0)).p
 
 

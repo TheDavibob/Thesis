@@ -77,6 +77,10 @@ def progress(iterable: Iterable, desc: str = "", every: int = 0):
     """Stand-in for MATLAB ``waitbar``.
 
     Logs at DEBUG level; set ``every`` to log only every n-th item.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
     """
     items = list(iterable)
     n = len(items)

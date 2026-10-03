@@ -48,21 +48,6 @@ def edge_field(request):
     return x1, T, np.max(np.abs(T.p[x1 < 0]))
 
 
-WAKE_MODE_NAN = ("KNOWN FAILURE: the wake-mode search (Newton from the fixed guess 0.9 + 0.35i in "
-                 "_te_setup) returns NaN at omega = 5 (and for some other flows), so the modal part "
-                 "and the whole downstream field are NaN.")
-ASYM_WAKE_JUMP = ("KNOWN FAILURE: with U_inf^+ != U_inf^- the acoustic (steepest-descent) part of the "
-                  "field jumps across the wake (0.35% of max|p| in p, 1.1% in v at U_inf^- = 1.5; zero for "
-                  "symmetric flow; independent of resolution). Likely the other stream's branch-cut "
-                  "contribution between the two steepest-descent contours is missing.")
-
-
-def _known(request, ids_reasons):
-    reason = ids_reasons.get(request.node.callspec.id)
-    if reason:
-        request.node.add_marker(pytest.mark.xfail(reason=reason, strict=True))
-
-
 class TestTrailingEdgeBoundaryConditions:
     TOL = 1e-3     # relative to max |p| on the upstream line
 
@@ -76,20 +61,17 @@ class TestTrailingEdgeBoundaryConditions:
         up = x1 < 0
         assert np.max(np.abs(T.v[up, 0])) / s < self.TOL
 
-    def test_downstream_field_finite(self, edge_field, request):
-        _known(request, {"sym-w5": WAKE_MODE_NAN})
+    def test_downstream_field_finite(self, edge_field):
         x1, T, _ = edge_field
         dn = x1 > 0
         assert np.all(np.isfinite(T.p[dn])) and np.all(np.isfinite(T.v[dn]))
 
-    def test_wake_pressure_continuous(self, edge_field, request):
-        _known(request, {"sym-w5": WAKE_MODE_NAN, "asym-w1": ASYM_WAKE_JUMP})
+    def test_wake_pressure_continuous(self, edge_field):
         x1, T, s = edge_field
         dn = x1 > 0
         assert np.max(np.abs(T.p[dn, 1] - T.p[dn, 0])) / s < self.TOL
 
-    def test_wake_normal_velocity_continuous(self, edge_field, request):
-        _known(request, {"sym-w5": WAKE_MODE_NAN, "asym-w1": ASYM_WAKE_JUMP})
+    def test_wake_normal_velocity_continuous(self, edge_field):
         x1, T, s = edge_field
         dn = x1 > 0
         assert np.max(np.abs(T.v[dn, 1] - T.v[dn, 0])) / s < self.TOL
@@ -214,3 +196,41 @@ def test_far_field_matches_near_field_asymmetric(theta, lower):
     FF = ff.FF2p.p if lower else ff.FF1p.p
     far = physical_amplitude(FF, np.array([theta]), Um.f(1.0) if lower else 1.0, 5.0, lower=lower)[0]
     assert np.isclose(near, far, rtol=0.03), (near, far)
+
+
+# --------------------------------------------------------------------------- wake modes
+class TestWakeModes:
+    """Zeros of D_w found by the sampled argument principle in rectangles that
+    avoid the branch cuts (``dw_zeros``)."""
+
+    @staticmethod
+    def _zeros(Uinf_m, omega, height=2.0):
+        from shear_flow_scattering.scripts.trailing_edge import dw_zeros, plate_operators
+        Up, Um = u_parabolic(0.3, 1, 1), u_parabolic(0.3, Uinf_m, 1)
+        return dw_zeros(plate_operators(omega, np.inf, Up, Um), omega, 0.0, Up, C5, 1.0, Um, C5, 1.0, height)
+
+    def test_thesis_mode(self):
+        """Thesis Fig. 6.2.2 / paper Fig. 3 flow: kappa_w = 0.8720 +- 0.2618i, as quoted."""
+        z = self._zeros(1.5, 1.0)
+        z = z[np.argsort(z.imag)]                     # conjugate pair: order by imaginary part
+        assert z.size == 2
+        assert np.allclose(z, [0.87200 - 0.26184j, 0.87200 + 0.26184j], atol=1e-4)
+
+    @pytest.mark.parametrize("Uinf_m, omega, expected", [
+        (1.0, 1.0, [1.1833 - 0.2694j, 1.1833 + 0.2694j]),
+        (2.0, 1.0, [0.6675 - 0.2559j, 0.6675 + 0.2559j]),
+        (1.0, 5.0, []),
+    ], ids=["sym-w1", "U2-w1", "sym-w5"])
+    def test_other_flows(self, Uinf_m, omega, expected):
+        """Including the cases where the original single Newton start returned NaN
+        or landed on the end of the critical-layer cut."""
+        z = self._zeros(Uinf_m, omega)
+        e = np.array(expected, dtype=complex)
+        z, e = z[np.argsort(z.imag)], e[np.argsort(e.imag)]
+        assert z.size == e.size and np.allclose(z, e, atol=1e-3)
+
+    def test_no_spurious_zero_near_cut_end(self):
+        """Uniformly stepped semicircles produce a zero near omega/U0 = 3.33 that
+        moves with resolution; the graded paths must not."""
+        z = self._zeros(1.5, 1.0)
+        assert not np.any(np.abs(z - 1.0 / 0.3) < 0.3)

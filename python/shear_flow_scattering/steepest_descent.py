@@ -31,6 +31,10 @@ def steepest_descent_contour(x1, x2, omega, Uinf, cinf, k3, N) -> Struct:
     quadrature ``t``, ``w``, ``dt`` and ``wdt`` (weights x Jacobian),
     ``X1``, ``X2``, ``Theta`` and the physical constants ``k0, K0, beta, M``.
     Not yet valid for negative ``x2`` (original comment).
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing calls it except :func:`sep18_integrate_sd`, itself unused.
+       Exercised only by ``tests/test_legacy.py``.
     """
     x1 = np.asarray(x1, dtype=float)
     x2 = np.asarray(x2, dtype=float)
@@ -89,6 +93,10 @@ def steepest_descent_contour_anon(omega, Uinf, cinf, k3):
     Marked "Not finished, essentially a check the mathematics is correct" in
     the original.  Returns ``(f, F, K1_SD, k1_SD)``: the phase in physical and
     shifted wavenumber, and the SD contour ``(t, Theta) -> k``.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
     """
     M = Uinf / cinf
     k0 = omega / cinf
@@ -113,6 +121,10 @@ def oct_18_ff_sd(theta, y2, k3, omega, U, c, delta, N_BL=1000) -> Struct:
     .. warning:: **Bug fixed.**  The wall-to-edge path was
        ``z.f = delta*(1-t)`` with ``z.df = -delta*t``; the derivative is
        ``-delta``.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
     """
     sd = far_field_saddle(theta, omega, U.f(delta), c.f(delta), k3)
     K1 = sd.saddle
@@ -147,6 +159,10 @@ def sep18_integrate_sd(x1, x2, y2, k3, omega, U, c, delta, N_SD=100, N_BL=100):
     * the hard-wall solution above the boundary layer is "FUTURE WORK".
 
     Returns ``(I, Integrand, Hard, Dec, Wron, k1)``.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
     """
     log.info("Setting up integration")
     k1 = steepest_descent_contour(x1, x2, omega, U.f(delta), c.f(delta), k3, N_SD)

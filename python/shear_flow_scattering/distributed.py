@@ -57,6 +57,10 @@ def integrand_distributed(omega, U, c, I0, omega_distributed, Km_distributed, y2
     .. warning:: **Bug fixed.**  The MATLAB used ``y2`` without it being an
        argument (it would error).  ``y2`` is now the final argument.
        Assumes a constant speed of sound (original note).
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
     """
     return -omega * c.f(0) ** 2 * I0 * omega_distributed / (Km_distributed * U.f(y2) ** 2)
 
@@ -86,6 +90,10 @@ def wall_pressure(y2, omega, k3, U, c, delta, l1, l2, N_bl, HP):
        ``(omega - U(y2) kappa1)^4`` with ``kappa1 = omega/U(y2)``, which is
        identically zero, so the result is always 0 (or NaN).  Ported
        literally; :func:`distributed_wall_pressure` supersedes it.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
     """
     y2 = row(y2)
     kappa1 = omega / U.f(y2)
@@ -236,7 +244,12 @@ def upstream_distributed_integrated(x1, omega_c, G: Struct, dkappa1, weighting="
 def scrappy_i0(k1, y2, I, U0=0.3, c0=5.0, delta=1.0, N_bl=6000, omega=1.0, k3=0.0):
     """``Scrappy_I0.m`` -- exploratory: ``I0(k1)`` for a source at ``y2`` over a
     hard wall, before setting ``k1 = kappa1``.  Parameters were hard-coded
-    in the MATLAB (linear profile ``U0 -> 1``, ``c = 5``); exposed here."""
+    in the MATLAB (linear profile ``U0 -> 1``, ``c = 5``); exposed here.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
+    """
     from .profiles import c_const, u_linear
 
     U, c = u_linear(U0, 1, delta), c_const(c0)

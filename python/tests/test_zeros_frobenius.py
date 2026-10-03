@@ -60,3 +60,22 @@ class TestFrobeniusTwoSolutions:
         assert y.I == 3 and np.isclose(y.s1, 2) and np.isclose(y.s2, -1)
         for fn, dfn in ((y.y1, y.dy1), (y.y2, y.dy2)):
             assert self._residual(fn, dfn, 0.4 + 0.2j, lambda z: 0, lambda z: -2 + z ** 2) < 1e-5
+
+
+class TestZerosInRectangle:
+    """Sampled argument principle + Delves-Lyness power sums + Newton."""
+
+    def test_many_zeros_with_quartering(self):
+        roots = np.array([0.3 + 0.2j, -0.5 + 0.7j, 1.1 + 0.1j, 0.9 + 0.9j, 0.2 + 0.5j, -1 + 0.3j])
+        f = lambda z: np.prod([z - r for r in roots], axis=0) * np.exp(0.3 * z)
+        found = zeros.zeros_in_rectangle(f, (-2, 2), (0.05, 1.5))
+        assert np.allclose(np.sort_complex(found), np.sort_complex(roots), atol=1e-10)
+
+    def test_ignores_zeros_outside_and_handles_none(self):
+        f = lambda z: (z - 3) * (z + 0.5j)
+        assert zeros.zeros_in_rectangle(f, (-1, 1), (0.1, 1)).size == 0
+        assert np.allclose(zeros.zeros_in_rectangle(f, (-1, 1), (-1, -0.1)), [-0.5j])
+
+    def test_rapidly_varying_function(self):
+        found = np.sort(zeros.zeros_in_rectangle(lambda z: np.sin(3 * z), (-3.3, 3.2), (-1, 0.9)).real)
+        assert np.allclose(found, np.pi / 3 * np.arange(-3, 4), atol=1e-9)

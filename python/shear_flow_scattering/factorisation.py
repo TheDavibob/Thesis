@@ -27,7 +27,12 @@ from .quadrature import lgwt
 
 
 def prec_setup(N=1000, t_max=20, t_min=-20) -> Struct:
-    """``Prec_Setup.m`` default precision struct."""
+    """``Prec_Setup.m`` default precision struct.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
+    """
     return Struct(N=N, max=t_max, min=t_min)
 
 
@@ -164,7 +169,12 @@ def _scaled(G, Gff, contour, prec, branch_cut, cont):
 def fact_mult_cont_scaled(G, Gff, contour, prec, branch_cut) -> Struct:
     """``Fact_Mult_Cont_Scaled.m`` -- factorise ``G`` whose far-field form
     ``Gff.f = Gff.p * Gff.m`` is known analytically.  Returns ``g`` with
-    ``g.f``, ``g.p``, ``g.m``."""
+    ``g.f``, ``g.p``, ``g.m``.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
+    """
     return _scaled(G, Gff, contour, prec, branch_cut, fact_mult_cont)
 
 
@@ -260,6 +270,10 @@ def add_fact_b(F, C, dC, N1, N2, N3, t1, t2):
     Calls ``FullIntervalIntA`` and ``CauchyKernel``, neither of which is in the
     repository.  The routine is superseded by :func:`fact_additive` (April
     2018), which performs the same Cauchy-integral split; use that instead.
+
+    .. warning:: **Unused legacy port.**  Kept for completeness of the MATLAB
+       port; nothing in the package, the example scripts or the paper
+       figures calls it.  Exercised only by ``tests/test_legacy.py``.
     """
     raise NotImplementedError(
         "AddFactB depends on FullIntervalIntA.m and CauchyKernel.m, which are "
