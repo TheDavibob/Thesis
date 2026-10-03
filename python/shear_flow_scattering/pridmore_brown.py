@@ -419,9 +419,10 @@ def _comp_full(k1, k3, omega, U, c, N, z, ic):
     return out
 
 
-def _comp_skip(k1, k3, omega, U, c, N, z, ic):
+def _comp_skip(k1, k3, omega, U, c, N, z, ic, prepare=True):
     k1 = row(k1)
-    z = _prepare_path(U, z, k1, omega)
+    if prepare:
+        z = _prepare_path(U, z, k1, omega)
     f = lambda s, phi, k: comp_ode_fun_pb(s, phi, k, omega, c, U, k3, z)
     phi1 = fixed_step_ivp_skip(f, ic, 1.0, N, k1)
     z1 = z.f(1.0)
@@ -440,15 +441,19 @@ def comp_dec_aug18a(k1, k3, omega, U, c, delta, N, z: Path):
                       lambda k: ic_decaying(k, k3, omega, U, c, delta))
 
 
-def comp_dec_aug18a_skip(k1, k3, omega, U, c, delta, N, z: Path):
+def comp_dec_aug18a_skip(k1, k3, omega, U, c, delta, N, z: Path, prepare=True):
     """``Comp_Dec_Aug18A_skip.m`` -- decaying solution at the path end ``z.f(1)``.
 
     This is *the* workhorse of the inversion code: with ``z`` running from
     ``delta`` to ``0`` it gives the dispersion relations ``D_h = v(0)`` and
     ``D_p = p(0)``.
+
+    ``prepare=False`` integrates along ``z`` exactly as given, skipping the
+    path-safety step (:func:`_prepare_path`) -- e.g. to show how the
+    semicircle itself moves the critical-layer cut for complex ``k1``.
     """
     return _comp_skip(k1, k3, omega, U, c, N, z,
-                      lambda k: ic_decaying(k, k3, omega, U, c, delta))
+                      lambda k: ic_decaying(k, k3, omega, U, c, delta), prepare)
 
 
 def comp_generic_aug18a(k1, k3, omega, U, c, l1, l2, N, z: Path):

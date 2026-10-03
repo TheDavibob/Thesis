@@ -217,8 +217,10 @@ def save_tikz(ax, path, width=r"0.951\fwidth", height=r"\fheight", graphics_dir=
             label = getattr(ax, f"get_{a}label")()
             if label:
                 opts.append(f"{a}label={{{label}}}")
-        mappables = list(ax.collections) + list(ax.images)
-        mappables = [m for m in mappables if hasattr(m, "get_array") and m.get_array() is not None]
+        from matplotlib.contour import ContourSet
+        contours = [m for m in ax.collections if isinstance(m, ContourSet)]
+        mappables = [m for m in list(ax.collections) + list(ax.images)
+                     if not isinstance(m, ContourSet) and hasattr(m, "get_array") and m.get_array() is not None]
         for i, m in enumerate(mappables, 1):
             png = f"{stem}-{i}.png"
             xa, xb, ya, yb = _raster(m, png)
@@ -233,7 +235,25 @@ def save_tikz(ax, path, width=r"0.951\fwidth", height=r"\fheight", graphics_dir=
                     clabel = m.colorbar.ax.get_ylabel()
                     if clabel:
                         opts.append(f"colorbar style={{ylabel={{{clabel}}}}}")
+        grid = None
+        for a in "xy":
+            lines = getattr(ax, f"{a}axis").get_gridlines()
+            if lines and lines[0].get_visible():
+                opts.append(f"{a}majorgrids")
+                grid = lines[0]
+        if grid is not None:
+            opts.append(f"grid style={{color={colours(grid.get_color())}, line width={grid.get_linewidth():.2g}pt}}")
         jump = False
+        for cs in contours:         # contour lines (not filled), one \addplot per piece
+            cols = cs.get_edgecolor()
+            lws = np.atleast_1d(cs.get_linewidth())
+            for i, cpath in enumerate(cs.get_paths()):
+                col = colours(cols[i % len(cols)])
+                lw = lws[i % len(lws)] * lw_scale
+                for piece in cpath.to_polygons(closed_only=False):
+                    if len(piece) > 1:
+                        body.append(f"\\addplot[color={col}, line width={lw:.2g}pt, mark=none, forget plot]\n"
+                                    + _table(piece[:, 0], piece[:, 1]))
         for line in ax.get_lines():
             lo = _line_options(line, colours, lw_scale)
             label = _legend_label(line, ax) if legend else None

@@ -66,13 +66,22 @@ def amplitude(theta1, theta2, FF1, FF2, Up, Um, c0):
     return np.concatenate([theta1, theta2]), np.concatenate(out)
 
 
+def theta_grids(n=N_TH):
+    """Observer angles above (theta1) and below (theta2) the plate: uniform,
+    plus log-clustered points next to theta = pi, where the directivity has a
+    very narrow grazing null (half-width ~0.1 deg at Ma = 0.02).  The end
+    points 0, pi, 2 pi are avoided (saddle on the acoustic branch point)."""
+    d = np.logspace(-3.7, -0.6, 40)
+    th1 = np.union1d(np.linspace(0, np.pi, n + 2)[1:-1], np.pi - d)
+    th2 = np.union1d(np.linspace(np.pi, 2 * np.pi, n + 2)[1:-1], np.pi + d)
+    return th1, th2
+
+
 def compute():
     from shear_flow_scattering.profiles import c_const
     from shear_flow_scattering.scripts.trailing_edge import far_field_trailing_edge_lined
 
-    # avoid theta = 0, pi, 2 pi exactly (saddle on the acoustic branch point)
-    th1 = np.linspace(0, np.pi, N_TH + 2)[1:-1]
-    th2 = np.linspace(np.pi, 2 * np.pi, N_TH + 2)[1:-1]
+    th1, th2 = theta_grids()
     data = {}
     for study, cs in cases().items():
         for label, p in cs.items():
