@@ -15,7 +15,7 @@ all four digits (linear profiles, or c0 = 2 or 10, do not).
 
 Usage::
 
-    uv run --extra plot python examples/fig_6_2_2.py [--fast]
+    uv run --extra plot python examples/fig_6_2_2.py [--fast] [--tikz]
 """
 import logging
 import sys
@@ -55,4 +55,7 @@ for ax, (which, f, title) in zip(axes, panels):
     ax.set(xlabel="$x_1$", ylabel="$x_2$", title=title)
 out = "fig_6_2_2_fast.png" if fast else "fig_6_2_2.png"
 fig.savefig(out, dpi=130)
+if "--tikz" in sys.argv:  # one matlab2tikz-style .tex per panel
+    from shear_flow_scattering.tikz import save_figure_tikz
+    print("wrote", *save_figure_tikz(fig, out[:-4]))
 print("saved", out)

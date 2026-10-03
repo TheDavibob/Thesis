@@ -414,3 +414,45 @@ def test_spurious_critical_points_and_safe_ellipse():
     ref = comp_dec_aug18a_skip(kk, 0.0, om, F, c, 1.0, 20000, contours.straight_path(1.0, 0.0)).v
     v = comp_dec_aug18a_skip(kk, 0.0, om, F, c, 1.0, 3000, contours.contour_semicircle(1.0, 1)).v
     assert np.allclose(v, ref, rtol=1e-5)
+
+
+def test_tikz_export(tmp_path):
+    """matlab2tikz-style export: lines (log axis, NaN gaps), pcolormesh raster
+    with colorbar, polar axes."""
+    mpl = pytest.importorskip("matplotlib")
+    mpl.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.image import imread
+    from shear_flow_scattering.tikz import save_figure_tikz
+
+    fig = plt.figure()
+    a = fig.add_subplot(1, 3, 1)
+    f = np.logspace(2, 4, 5)
+    y = np.array([1.0, 2.0, np.nan, 4.0, 5.0])
+    a.plot(f, y, "C0--", label=r"$y_2 = 0.1\delta$")
+    a.plot(f, y + 1, "o", color="C1")
+    a.set_xscale("log"); a.set_xlabel("$f$"); a.legend()
+    b = fig.add_subplot(1, 3, 2)
+    x1, x2 = np.linspace(-1, 2, 7), np.linspace(0, 1, 4)
+    data = np.add.outer(x2, x1)                       # increases up and right
+    m = b.pcolormesh(x1, x2, data, shading="auto", cmap="viridis")
+    fig.colorbar(m, ax=b)
+    c = fig.add_subplot(1, 3, 3, projection="polar")
+    c.plot(np.linspace(0, 2 * np.pi, 50), np.ones(50), label="unit"); c.legend()
+
+    paths = save_figure_tikz(fig, str(tmp_path / "fig"))
+    assert [p[-5:] for p in paths] == ["a.tex", "b.tex", "c.tex"]
+    ta, tb, tc = (open(p).read() for p in paths)
+    assert "xmode=log" in ta and "unbounded coords=jump" in ta and "dashed" in ta
+    assert r"\addlegendentry{$y_2 = 0.1\delta$}" in ta and ta.count(r"\addlegendentry") == 1
+    assert "nan" in ta and "mark=*" in ta
+    assert "graphics[" in tb and "colorbar" in tb and "fig_b-1.png" in tb
+    img = imread(str(tmp_path / "fig_b-1.png"))
+    assert img.shape[:2] == (4, 7)
+    # top-right pixel is the largest value -> the yellow end of viridis
+    assert img[0, -1, 0] > 0.9 and img[-1, 0, 0] < 0.3
+    assert "axis equal image" in tc and r"\addlegendentry{unit}" in tc
+    for t in (ta, tb, tc):
+        assert t.count(r"\begin{axis}") == t.count(r"\end{axis}") == 1
+        assert t.count("{") == t.count("}")
+    plt.close(fig)

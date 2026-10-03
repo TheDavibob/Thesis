@@ -10,7 +10,7 @@ Both use the physical far-field amplitude lim r^(1/2)|p'| (see sec42_studies.py)
 
 Usage::
 
-    uv run --extra plot python examples/fig_paper_6.py [--fast] [--replot]
+    uv run --extra plot python examples/fig_paper_6.py [--fast] [--replot] [--tikz]
 """
 import logging
 import sys
@@ -74,6 +74,9 @@ def plot(th, out):
     fig.suptitle("Wall-pressure-to-far-field transfer, $\omega = 5$, $\kappa_1 = \omega/(0.8U_\infty)$: "
                  "corrected (solid); original, rescaled to the same peak (dashed)", fontsize=10)
     fig.savefig(stem + ".png", dpi=130)
+    if "--tikz" in sys.argv:  # one matlab2tikz-style .tex per panel
+        from shear_flow_scattering.tikz import save_figure_tikz
+        print("wrote", *save_figure_tikz(fig, stem))
     print("saved", stem + ".png")
     for c0 in C0S:
         for U0 in U0S:

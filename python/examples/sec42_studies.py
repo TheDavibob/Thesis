@@ -28,7 +28,7 @@ C. profiles  -- same slip U0 = 0.3, increasing wall shear: a cubic with
 
 Usage::
 
-    uv run --extra plot python examples/sec42_studies.py [--fast] [--replot]
+    uv run --extra plot python examples/sec42_studies.py [--fast] [--replot] [--tikz]
 """
 import logging
 import sys
@@ -118,6 +118,9 @@ def plot(data):
     fig.suptitle(r"Far-field amplitude $\lim r^{1/2}|p'|$ for a unit wall-pressure gust, "
                  r"$\omega = 5$, $\kappa_1 = \omega/(0.8U_\infty^+)$, hard trailing edge", fontsize=11)
     fig.savefig(stem + ".png", dpi=130)
+    if "--tikz" in sys.argv:  # one matlab2tikz-style .tex per panel
+        from shear_flow_scattering.tikz import save_figure_tikz
+        print("wrote", *save_figure_tikz(fig, stem))
     print("saved", stem + ".png")
 
     print("\nAmplitude at selected angles, and dB relative to the first case of each study:")

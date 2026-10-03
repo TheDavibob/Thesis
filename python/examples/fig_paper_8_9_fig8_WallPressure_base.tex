@@ -1,0 +1,185 @@
+% This file was created by shear_flow_scattering.tikz (matlab2tikz-compatible).
+%
+\definecolor{mycolor1}{rgb}{0.12157,0.46667,0.70588}%
+\definecolor{mycolor2}{rgb}{1.00000,0.49804,0.05490}%
+\definecolor{mycolor3}{rgb}{0.17255,0.62745,0.17255}%
+\definecolor{mycolor4}{rgb}{0.83922,0.15294,0.15686}%
+\definecolor{mycolor5}{rgb}{0.58039,0.40392,0.74118}%
+%
+\begin{tikzpicture}
+
+\begin{axis}[%
+width=0.951\fwidth,
+height=\fheight,
+xmin=100,
+xmax=5000,
+ymin=-250,
+ymax=10,
+xmode=log,
+xminorticks=true,
+ylabel={$20\log_{10}|p_w|$},
+unbounded coords=jump,
+scale only axis,
+title={(a) Wall pressure, base case},
+legend style={legend cell align=left, align=left, draw=white!15!black, font=\footnotesize}
+]
+\addplot[color=mycolor1, line width=1.8pt, mark=none]
+table[row sep=crcr]{%
+100	-26.3391\\
+142.51	-27.011\\
+203.092	-27.8447\\
+289.427	-28.9714\\
+412.463	-30.5735\\
+587.802	-32.9057\\
+837.678	-36.331\\
+1193.78	-41.3732\\
+1701.25	-48.7811\\
+2424.46	-59.6029\\
+3455.11	-75.2948\\
+4923.88	-97.9007\\
+7017.04	-130.321\\
+10000	-176.69\\
+};
+\addlegendentry{$y_2 = 0.1\delta$}
+\addplot[color=mycolor2, line width=1.8pt, mark=none]
+table[row sep=crcr]{%
+100	-21.1123\\
+142.51	-23.1599\\
+203.092	-25.2325\\
+289.427	-27.6939\\
+412.463	-30.9565\\
+587.802	-35.5496\\
+837.678	-42.194\\
+1193.78	-51.8757\\
+1701.25	-65.941\\
+2424.46	-86.2543\\
+3455.11	-115.441\\
+4923.88	-157.233\\
+7017.04	-216.954\\
+10000	-302.205\\
+};
+\addlegendentry{$y_2 = 0.2\delta$}
+\addplot[color=mycolor2, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor2}, forget plot]
+table[row sep=crcr]{%
+100	-18.9835\\
+142.51	nan\\
+203.092	nan\\
+289.427	nan\\
+412.463	-30.1188\\
+587.802	nan\\
+837.678	nan\\
+1193.78	nan\\
+1701.25	-65.761\\
+2424.46	nan\\
+3455.11	nan\\
+4923.88	nan\\
+7017.04	nan\\
+10000	-302.281\\
+};
+\addplot[color=mycolor3, line width=1.8pt, mark=none]
+table[row sep=crcr]{%
+100	-17.3269\\
+142.51	-19.6119\\
+203.092	-22.9763\\
+289.427	-26.9349\\
+412.463	-31.9689\\
+587.802	-38.8379\\
+837.678	-48.5562\\
+1193.78	-62.4861\\
+1701.25	-82.4916\\
+2424.46	-111.175\\
+3455.11	-152.219\\
+4923.88	-210.859\\
+7017.04	-294.564\\
+10000	-414\\
+};
+\addlegendentry{$y_2 = 0.3\delta$}
+\addplot[color=mycolor3, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor3}, forget plot]
+table[row sep=crcr]{%
+100	-19.1062\\
+142.51	nan\\
+203.092	nan\\
+289.427	nan\\
+412.463	-32.2799\\
+587.802	nan\\
+837.678	nan\\
+1193.78	nan\\
+1701.25	-82.523\\
+2424.46	nan\\
+3455.11	nan\\
+4923.88	nan\\
+7017.04	nan\\
+10000	-413.793\\
+};
+\addplot[color=mycolor4, line width=1.8pt, mark=none]
+table[row sep=crcr]{%
+100	-23.0496\\
+142.51	-22.6794\\
+203.092	-24.9338\\
+289.427	-29.0553\\
+412.463	-35.0118\\
+587.802	-43.5112\\
+837.678	-55.7202\\
+1193.78	-73.2843\\
+1701.25	-98.5097\\
+2424.46	-134.655\\
+3455.11	-186.35\\
+4923.88	-260.189\\
+7017.04	-365.586\\
+10000	-515.983\\
+};
+\addlegendentry{$y_2 = 0.4\delta$}
+\addplot[color=mycolor4, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor4}, forget plot]
+table[row sep=crcr]{%
+100	-22.4316\\
+142.51	nan\\
+203.092	nan\\
+289.427	nan\\
+412.463	-35.2269\\
+587.802	nan\\
+837.678	nan\\
+1193.78	nan\\
+1701.25	-98.5507\\
+2424.46	nan\\
+3455.11	nan\\
+4923.88	nan\\
+7017.04	nan\\
+10000	-515.993\\
+};
+\addplot[color=mycolor5, line width=1.8pt, mark=none]
+table[row sep=crcr]{%
+100	-27.9888\\
+142.51	-26.5415\\
+203.092	-28.0065\\
+289.427	-32.2095\\
+412.463	-38.9089\\
+587.802	-48.8037\\
+837.678	-63.2318\\
+1193.78	-84.118\\
+1701.25	-114.187\\
+2424.46	-157.312\\
+3455.11	-219.013\\
+4923.88	-307.162\\
+7017.04	-433.003\\
+10000	-612.6\\
+};
+\addlegendentry{$y_2 = 0.5\delta$}
+\addplot[color=mycolor5, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor5}, forget plot]
+table[row sep=crcr]{%
+100	-27.7254\\
+142.51	nan\\
+203.092	nan\\
+289.427	nan\\
+412.463	-38.6543\\
+587.802	nan\\
+837.678	nan\\
+1193.78	nan\\
+1701.25	-114.148\\
+2424.46	nan\\
+3455.11	nan\\
+4923.88	nan\\
+7017.04	nan\\
+10000	-612.704\\
+};
+\end{axis}
+\end{tikzpicture}%

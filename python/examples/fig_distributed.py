@@ -12,7 +12,7 @@ Plots Re p and Re v, total and scattered, with colourbars.
 
 Usage::
 
-    uv run --extra plot python examples/fig_distributed.py [--fast]
+    uv run --extra plot python examples/fig_distributed.py [--fast] [--tikz]
 """
 import logging
 import sys
@@ -47,4 +47,7 @@ for ax, (which, f, title) in zip(axes, panels):
     ax.set(xlabel="$x_1$", ylabel="$x_2$", title=title)
 out = "fig_distributed_fast.png" if fast else "fig_distributed.png"
 fig.savefig(out, dpi=130)
+if "--tikz" in sys.argv:  # one matlab2tikz-style .tex per panel
+    from shear_flow_scattering.tikz import save_figure_tikz
+    print("wrote", *save_figure_tikz(fig, out[:-4]))
 print("saved", out)

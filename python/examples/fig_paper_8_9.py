@@ -22,7 +22,11 @@ Two routes:
 
 Usage::
 
-    uv run --extra plot python examples/fig_paper_8_9.py [--fast] [--replot]
+    uv run --extra plot python examples/fig_paper_8_9.py [--fast] [--replot] [--tikz]
+
+Plots stop at ``F_MAX`` = 5 kHz: above it the levels are 150-250 dB below the
+low-frequency ones and the sheared/base ratios are not meaningful.
+``--tikz`` also writes one matlab2tikz-style ``.tex`` per panel.
 """
 import logging
 import os
@@ -39,6 +43,7 @@ F_HZ = np.logspace(2, 4, 5 if fast else 14)
 OMEGA = F_HZ * 2 * np.pi * 0.02 / 10
 TWO_PIECE_IDX = [0, 2, 4] if fast else [0, 4, 8, 13]
 ROUTES = ("fit", "two-piece")
+F_MAX = 5000.0   # plotted range (Hz)
 CASES = ("base", "sheared")
 
 
@@ -127,6 +132,12 @@ def masked(route, name, what, val):
     return val
 
 
+def tikz(fig, stem_, names):
+    if "--tikz" in sys.argv:
+        from shear_flow_scattering.tikz import save_figure_tikz
+        print("wrote", *save_figure_tikz(fig, stem_, names))
+
+
 def plot(res):
     import matplotlib.pyplot as plt
 
@@ -145,6 +156,7 @@ def plot(res):
                     ax.plot(F_HZ, db(val), color=f"C{j}",
                             label=(f"$y_2 = {y}\\delta$" if route == "fit" else None), **STYLE[route])
             ax.set_xscale("log")
+            ax.set_xlim(F_HZ[0], F_MAX)
             ax.set_ylim(-250, 10)
             label = "Wall" if what == "pw" else "Far-field"
             ax.set_title(f"({'abcd'[2 * row + col]}) {label} pressure, {name} case")
@@ -155,6 +167,7 @@ def plot(res):
     fig.suptitle("Corrected Fig. 8 -- lines: analytic fits; circles: two-piece profiles (indented paths; "
                  "points flagged unreliable omitted)", fontsize=10)
     fig.savefig(stem + "_fig8.png", dpi=130)
+    tikz(fig, stem + "_fig8", ["WallPressure_base", "WallPressure_sheared", "FFPressure_base", "FFPressure_sheared"])
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4), constrained_layout=True, sharey=True)
     for ax, what in zip(axes, ("pw", "pff")):
@@ -172,13 +185,15 @@ def plot(res):
                         label=(f"$y_2 = {y}\\delta$" if route == "fit" else None), **STYLE[route])
         ax.axhline(0, color="k", lw=0.6)
         ax.set_xscale("log")
-        ax.set_ylim(-80, 40)
+        ax.set_xlim(F_HZ[0], F_MAX)
+        ax.set_ylim(-40, 20)
         ax.set_xlabel("Frequency, f (Hz)")
         ax.set_title("(a) wall pressure, sheared / base" if what == "pw" else "(b) far field, sheared / base")
     axes[0].set_ylabel("dB")
     axes[0].legend(fontsize=8)
     fig.suptitle("Corrected Fig. 9 -- lines: analytic fits; circles: two-piece profiles", fontsize=10)
     fig.savefig(stem + "_fig9.png", dpi=130)
+    tikz(fig, stem + "_fig9", ["WallPressure_reduction", "FFPressure_reduction"])
     print("saved", stem + "_fig8.png", stem + "_fig9.png")
 
 

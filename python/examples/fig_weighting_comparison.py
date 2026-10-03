@@ -15,8 +15,8 @@ but the unit-source wall pressure I0 vanishes there like (delta - y2)^4.
 
 Usage::
 
-    uv run --extra plot python examples/fig_weighting_comparison.py [--fast]
-    uv run --extra plot python examples/fig_weighting_comparison.py --replot [--fast]
+    uv run --extra plot python examples/fig_weighting_comparison.py [--fast] [--tikz]
+    uv run --extra plot python examples/fig_weighting_comparison.py --replot [--fast] [--tikz]
 
 ``--replot`` redraws from the saved ``.npz`` without recomputing.
 """
@@ -43,6 +43,9 @@ def plot(x1, x2, results):
             ax.plot([-5, 0], [0, 0], "k", lw=4)
             ax.set(xlabel="$x_1$", ylabel="$x_2$", title=f"Re $p'$ total, {dname}, weighting='{w}'")
     fig.savefig(stem + ".png", dpi=120)
+    if "--tikz" in sys.argv:  # one matlab2tikz-style .tex per panel
+        from shear_flow_scattering.tikz import save_figure_tikz
+        print("wrote", *save_figure_tikz(fig, stem))
     print("saved", stem + ".png")
 
 
