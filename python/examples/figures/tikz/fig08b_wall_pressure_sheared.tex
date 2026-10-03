@@ -1,10 +1,12 @@
 % This file was created by shear_flow_scattering.tikz (matlab2tikz-compatible).
 %
-\definecolor{mycolor1}{rgb}{0.12157,0.46667,0.70588}%
-\definecolor{mycolor2}{rgb}{1.00000,0.49804,0.05490}%
-\definecolor{mycolor3}{rgb}{0.17255,0.62745,0.17255}%
-\definecolor{mycolor4}{rgb}{0.83922,0.15294,0.15686}%
-\definecolor{mycolor5}{rgb}{0.58039,0.40392,0.74118}%
+\definecolor{mycolor1}{rgb}{0.85000,0.85000,0.85000}%
+\definecolor{mycolor2}{rgb}{0.93000,0.93000,0.93000}%
+\definecolor{mycolor3}{rgb}{0.12157,0.46667,0.70588}%
+\definecolor{mycolor4}{rgb}{1.00000,0.49804,0.05490}%
+\definecolor{mycolor5}{rgb}{0.17255,0.62745,0.17255}%
+\definecolor{mycolor6}{rgb}{0.83922,0.15294,0.15686}%
+\definecolor{mycolor7}{rgb}{0.58039,0.40392,0.74118}%
 %
 \begin{tikzpicture}
 
@@ -20,11 +22,16 @@ log basis x=10,
 xtick={100,1000},
 minor xtick={200,300,400,500,600,700,800,900,2000,3000,4000,5000},
 ylabel={$20\log_{10}|p_w|$},
+xmajorgrids,
+ymajorgrids,
+grid style={color=mycolor1, line width=0.5pt},
+xminorgrids,
+minor grid style={color=mycolor2, line width=0.4pt},
 unbounded coords=jump,
 scale only axis,
 title={(b) Wall pressure, sheared case}
 ]
-\addplot[color=mycolor1, line width=1.8pt, mark=none, forget plot]
+\addplot[color=mycolor3, line width=1.8pt, mark=none, forget plot]
 table[row sep=crcr]{%
 100	-14.7149\\
 142.51	-15.2772\\
@@ -41,7 +48,7 @@ table[row sep=crcr]{%
 7017.04	-178.747\\
 10000	-249.57\\
 };
-\addplot[color=mycolor1, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor1}, forget plot]
+\addplot[color=mycolor3, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor3}, forget plot]
 table[row sep=crcr]{%
 100	-13.7962\\
 142.51	nan\\
@@ -58,7 +65,7 @@ table[row sep=crcr]{%
 7017.04	nan\\
 10000	-250.414\\
 };
-\addplot[color=mycolor2, line width=1.8pt, mark=none, forget plot]
+\addplot[color=mycolor4, line width=1.8pt, mark=none, forget plot]
 table[row sep=crcr]{%
 100	-22.1747\\
 142.51	-21.7428\\
@@ -75,7 +82,7 @@ table[row sep=crcr]{%
 7017.04	-247.282\\
 10000	-348.962\\
 };
-\addplot[color=mycolor2, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor2}, forget plot]
+\addplot[color=mycolor4, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor4}, forget plot]
 table[row sep=crcr]{%
 100	-22.8178\\
 142.51	nan\\
@@ -92,7 +99,7 @@ table[row sep=crcr]{%
 7017.04	nan\\
 10000	-348.181\\
 };
-\addplot[color=mycolor3, line width=1.8pt, mark=none, forget plot]
+\addplot[color=mycolor5, line width=1.8pt, mark=none, forget plot]
 table[row sep=crcr]{%
 100	-25.3686\\
 142.51	-25.6127\\
@@ -109,7 +116,7 @@ table[row sep=crcr]{%
 7017.04	-312.823\\
 10000	-443.055\\
 };
-\addplot[color=mycolor4, line width=1.8pt, mark=none, forget plot]
+\addplot[color=mycolor6, line width=1.8pt, mark=none, forget plot]
 table[row sep=crcr]{%
 100	-23.7125\\
 142.51	-25.2392\\
@@ -126,7 +133,7 @@ table[row sep=crcr]{%
 7017.04	-379.565\\
 10000	-538.722\\
 };
-\addplot[color=mycolor4, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor4}, forget plot]
+\addplot[color=mycolor6, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor6}, forget plot]
 table[row sep=crcr]{%
 100	-19.0398\\
 142.51	nan\\
@@ -143,7 +150,7 @@ table[row sep=crcr]{%
 7017.04	nan\\
 10000	-540.01\\
 };
-\addplot[color=mycolor5, line width=1.8pt, mark=none, forget plot]
+\addplot[color=mycolor7, line width=1.8pt, mark=none, forget plot]
 table[row sep=crcr]{%
 100	-19.0553\\
 142.51	-19.0387\\
@@ -160,7 +167,7 @@ table[row sep=crcr]{%
 7017.04	-444.016\\
 10000	-631.11\\
 };
-\addplot[color=mycolor5, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor5}, forget plot]
+\addplot[color=mycolor7, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor7}, forget plot]
 table[row sep=crcr]{%
 100	-24.2502\\
 142.51	nan\\

@@ -156,8 +156,8 @@ def _polar(ax, colours, lw_scale, legend):
         lx, ly = to_xy(a, 1.12 * rmax)
         body.append(f"\\node at (axis cs:{lx:.4g},{ly:.4g}) {{${np.rad2deg(a):.0f}^\\circ$}};\n")
     lab = np.deg2rad(22.5)
-    # label every other ring, skipping the crowded centre
-    for r in [r for r in ax.get_yticks()[::-1][::2] if 0.3 * rmax < r <= rmax * (1 + 1e-9)]:
+    # label the rings matplotlib labels (thin them there), skipping the crowded centre
+    for r in [r for r in ax.get_yticks() if 0.3 * rmax < r <= rmax * (1 + 1e-9)]:
         lx, ly = to_xy(lab, r)
         body.append(f"\\node[anchor=south west, font=\\scriptsize] at (axis cs:{lx:.4g},{ly:.4g}) {{{r:g}}};\n")
     for line in ax.get_lines():
@@ -255,6 +255,16 @@ def save_tikz(ax, path, width=r"0.951\fwidth", height=r"\fheight", graphics_dir=
                 grid = lines[0]
         if grid is not None:
             opts.append(f"grid style={{color={colours(grid.get_color())}, line width={grid.get_linewidth():.2g}pt}}")
+        minor = None
+        for a in "xy":
+            axis_ = getattr(ax, f"{a}axis")
+            mlines = [t.gridline for t in axis_.get_minor_ticks()]
+            if mlines and mlines[0].get_visible():
+                opts.append(f"{a}minorgrids")
+                minor = mlines[0]
+        if minor is not None:
+            opts.append(f"minor grid style={{color={colours(minor.get_color())}, "
+                        f"line width={minor.get_linewidth():.2g}pt}}")
         jump = False
         for cs in contours:         # contour lines (not filled), one \addplot per piece
             cols = cs.get_edgecolor()

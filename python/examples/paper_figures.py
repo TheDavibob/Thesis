@@ -91,6 +91,13 @@ def field_axes(ax, x1, x2, data, title, cmap="viridis"):
     ax.set(xlabel="$x_1$", ylabel="$x_2$", title=title)
 
 
+def thin_radial_ticks(ax, n=3):
+    """Polar axes: at most ``n`` labelled radial rings, labels along 22.5 deg, so they do not overlap."""
+    from matplotlib.ticker import MaxNLocator
+    ax.yaxis.set_major_locator(MaxNLocator(n, prune="lower"))
+    ax.set_rlabel_position(22.5)
+
+
 def db(x):
     with np.errstate(divide="ignore", invalid="ignore"):
         return 20 * np.log10(np.abs(x))
@@ -199,6 +206,7 @@ def fig06():
         for j, U0 in enumerate(U0S_6):
             ax.plot(d["theta"], d[f"A_{c0:g}_{U0:g}"], color=f"C{j}", lw=2,
                     label=(f"$U_0 = {U0:g}U_\\infty$" if U0 < 1 else "$U_0 = U_\\infty$"))
+        thin_radial_ticks(ax)
         ax.set_title(title, pad=12)
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.06), ncol=3, fontsize=8, frameon=False)
     save(fig, "fig06_wall_pressure_far_field_transfer",
@@ -293,6 +301,9 @@ def fig08_09():
                     val = f89.masked(route, name, what, pw[:, j] if what == "pw" else pw[:, j] * T[:, j])
                     ax.plot(F, db(val), color=f"C{j}", label=(f"$y_2 = {y:g}\\delta$" if route == "fit" else None),
                             **f89.STYLE[route])
+            ax.grid(True, which="major", color="0.85", lw=0.5)
+            ax.grid(True, which="minor", axis="x", color="0.93", lw=0.4)
+            ax.set_axisbelow(True)
             ax.set(xscale="log", xlim=(F[0], f89.F_MAX), ylim=(-250, 10),
                    title=f"({'abcd'[2 * row + col]}) {'Wall' if what == 'pw' else 'Far-field'} pressure, {name} case",
                    ylabel=r"$20\log_{10}|p_w|$" if what == "pw" else r"$20\log_{10}|p_{ff}|$")
@@ -314,6 +325,9 @@ def fig08_09():
                 ax.plot(F, db(r), color=f"C{j}", label=(f"$y_2 = {y:g}\\delta$" if route == "fit" else None),
                         **f89.STYLE[route])
         ax.axhline(0, color="k", lw=0.6)
+        ax.grid(True, which="major", color="0.85", lw=0.5)
+        ax.grid(True, which="minor", axis="x", color="0.93", lw=0.4)
+        ax.set_axisbelow(True)
         ax.set(xscale="log", xlim=(F[0], f89.F_MAX), ylim=(-40, 20), xlabel="Frequency, f (Hz)",
                title="(a) Wall pressure, sheared / base" if what == "pw" else "(b) Far field, sheared / base")
     axes[0].set_ylabel("dB")
@@ -491,9 +505,35 @@ def figNew42():
         for i, (s, lab) in enumerate(labels):
             if s == study:
                 ax.plot(d[f"theta_{i}"], d[f"A_{i}"], lw=1.8, label=lab)
+        thin_radial_ticks(ax)
         ax.set_title(titles.get(study, study), pad=14)
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.06), fontsize=8, ncol=2, frameon=False)
     save(fig, "figNew42_parameter_studies", ["asymmetry", "mach_number", "profile_shape"])
+
+
+def write_preview():
+    """figures/tikz/preview.tex: every TikZ panel on its own page (compile with pdflatex)."""
+    import glob
+    names = sorted(os.path.basename(f)[:-4] for f in glob.glob(os.path.join(TIKZ, "*.tex"))
+                   if not f.endswith("preview.tex"))
+    out = [r"""\documentclass{article}
+\usepackage[margin=2cm]{geometry}
+\usepackage{amsmath}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.16}
+\newlength\fheight \newlength\fwidth
+\begin{document}
+"""]
+    for n in names:
+        w, h = ("0.6", "0.6") if n.startswith(("fig06", "figNew42")) else ("0.75", "0.45")
+        out.append(rf"""\section*{{\detokenize{{{n}}}}}
+\setlength\fwidth{{{w}\linewidth}}\setlength\fheight{{{h}\fwidth}}
+\input{{{n}.tex}}
+\clearpage
+""")
+    out.append("\\end{document}\n")
+    with open(os.path.join(TIKZ, "preview.tex"), "w") as fh:
+        fh.write("".join(out))
 
 
 FIGURES = dict(fig03=fig03, fig04=fig04, fig05=fig05, fig06=fig06, fig07=fig07, fig08_09=fig08_09,
@@ -513,3 +553,4 @@ if __name__ == "__main__":
             FIGURES[n]()
         except Exception:
             logging.exception("%s failed", n)
+    write_preview()
