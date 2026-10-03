@@ -58,8 +58,10 @@ def tanh_contour_b(a, bm, bp, tm, tp):
     fm = lambda t: a - (bm - a) * np.tanh(t / tm)
     dfp = lambda t: (bp - a) * _sech2(t / tp) / tp
     dfm = lambda t: -(bm - a) * _sech2(t / tm) / tm
-    C = lambda t: t + 1j * (heaviside(t) * fp(t) + heaviside(-t) * fm(t))
-    dC = lambda t: 1 + 1j * (heaviside(t) * dfp(t) + heaviside(-t) * dfm(t))
+    # halves H(t) and 1 - H(t): heaviside(t) and heaviside(-t) are both 1 at t = 0, which
+    # double-counted a there in the original (C(0) = 2ia)
+    C = lambda t: t + 1j * (heaviside(t) * fp(t) + (1 - heaviside(t)) * fm(t))
+    dC = lambda t: 1 + 1j * (heaviside(t) * dfp(t) + (1 - heaviside(t)) * dfm(t))
     return C, dC
 
 
@@ -93,8 +95,8 @@ def ellipse_contour(H, W):
     dge = lambda t: -b ** 2 * (t - W / 2) / ge(t)
     g = lambda t: ge(t) * heaviside(W - t)
     dg = lambda t: dge(t) * heaviside(W - t)
-    C = lambda t: (t + 1j * g(t)) * heaviside(t) + t * heaviside(-t)
-    dC = lambda t: (1 + 1j * dg(t)) * heaviside(t) + 1.0 * heaviside(-t)
+    C = lambda t: (t + 1j * g(t)) * heaviside(t) + t * (1 - heaviside(t))
+    dC = lambda t: (1 + 1j * dg(t)) * heaviside(t) + 1.0 * (1 - heaviside(t))
     return C, dC
 
 
@@ -123,8 +125,8 @@ def veitch_contour_b(Dp, Wp, Dm, Wm):
     dCp = lambda t: 1 - Ap * (Bp - 3 * t ** 4) / (Bp + t ** 4) ** 2
     Cm = lambda t: t - Am * t / (Bm + t ** 4)
     dCm = lambda t: 1 - Am * (Bm - 3 * t ** 4) / (Bm + t ** 4) ** 2
-    C = lambda t: Cp(t) * heaviside(t) + Cm(t) * heaviside(-t)
-    dC = lambda t: dCp(t) * heaviside(t) + dCm(t) * heaviside(-t)
+    C = lambda t: Cp(t) * heaviside(t) + Cm(t) * (1 - heaviside(t))
+    dC = lambda t: dCp(t) * heaviside(t) + dCm(t) * (1 - heaviside(t))
     return C, dC
 
 

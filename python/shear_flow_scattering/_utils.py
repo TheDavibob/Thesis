@@ -57,8 +57,13 @@ class Path(Struct):
 
 
 def heaviside(x):
-    """``heaviside.m``: ``x >= 0`` (on the real part, as MATLAB compares)."""
-    return (np.real(x) >= 0).astype(float)
+    """``heaviside.m``: ``x >= 0`` (on the real part, as MATLAB compares), as 0./1.
+
+    MATLAB logicals act as 0/1 in arithmetic, scalar or array.  (The first
+    port used ``(np.real(x) >= 0).astype(float)``, which fails for a Python
+    scalar: the comparison then returns a plain ``bool``.)
+    """
+    return np.where(np.real(x) >= 0, 1.0, 0.0)
 
 
 def trapezoid(y, x):

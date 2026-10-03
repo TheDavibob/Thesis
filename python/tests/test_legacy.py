@@ -70,9 +70,6 @@ class TestLegacyContours:
         t = _a(-1.3, -0.4, 0.5, 2.0)                # both halves (sign bug in the original)
         assert np.allclose(dC(t), _fd(C, t))
 
-    @pytest.mark.xfail(strict=True, reason="KNOWN FAILURE (inherited from TanhContourB.m): at t = 0 both "
-                       "halves are switched on, since heaviside(0) = heaviside(-0) = 1, so C(0) = 2ia instead of ia "
-                       "and dC(0) is the sum of both slopes.")
     def test_tanh_contour_b_at_zero(self):
         C, _ = contours.tanh_contour_b(0.2, -0.7, 1.3, 1.5, 0.8)
         assert np.isclose(C(_a(0.0))[0], 0.2j)
@@ -343,15 +340,12 @@ def test_wall_pressure_far_field_routine_loops_the_single_frequency_version():
 
 class TestHeaviside:
     """``_utils.heaviside`` -- used by the legacy contours above and by
-    ``factorisation`` (always with arrays there)."""
+    ``factorisation``; MATLAB logicals act as 0/1 for scalars too."""
 
     def test_arrays(self):
         from shear_flow_scattering._utils import heaviside
         assert np.array_equal(heaviside(np.array([-1.0, 0.0, 2.0 + 1j])), [0.0, 1.0, 1.0])
 
-    @pytest.mark.xfail(strict=True, reason="KNOWN FAILURE: heaviside(x) = (np.real(x) >= 0).astype(float) "
-                       "fails for a scalar x, where the comparison returns a Python bool (no .astype); so "
-                       "tanh_contour_b, ellipse_contour and veitch_contour_b crash when called with a scalar t.")
     def test_scalar(self):
         from shear_flow_scattering._utils import heaviside
         assert heaviside(0.5) == 1.0 and heaviside(-0.5) == 0.0

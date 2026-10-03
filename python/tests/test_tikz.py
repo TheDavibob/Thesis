@@ -115,9 +115,6 @@ class TestSaveTikzFigureFeatures:
         assert r"yticklabels={{$-\pi$},{0},{$\pi$}}" in ta
         assert "ytick={-3.14159,0,3.14159}" in ta
 
-    @pytest.mark.xfail(strict=True, reason="KNOWN FAILURE: save_tikz skips Rectangle patches -- it compares "
-                       "p.get_transform() with ax.transData, but a patch's transform also includes its patch "
-                       "transform, so the test never matches.")
     def test_contours_and_rectangle_exported_as_lines(self, exported_extras):
         ta = exported_extras[0]
         assert ta.count(r"\addplot[color=") >= 3     # two contour levels + rectangle

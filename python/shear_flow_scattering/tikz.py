@@ -277,12 +277,13 @@ def save_tikz(ax, path, width=r"0.951\fwidth", height=r"\fheight", graphics_dir=
                         body.append(f"\\addplot[color={col}, line width={lw:.2g}pt, mark=none, forget plot]\n"
                                     + _table(piece[:, 0], piece[:, 1]))
         from matplotlib.patches import Rectangle
-        for p in ax.patches:        # unfilled rectangles (e.g. a zoom box)
-            if isinstance(p, Rectangle) and p.get_transform() == ax.transData:
-                (xa, ya), w, h = p.get_xy(), p.get_width(), p.get_height()
+        for p in ax.patches:        # unfilled rectangles (e.g. a zoom box), outline in data coordinates
+            # p.get_transform() also contains the patch's own placement, so it is never
+            # ax.transData itself: compare the data transform instead
+            if isinstance(p, Rectangle) and p.get_data_transform() == ax.transData:
+                xy = p.get_patch_transform().transform(p.get_path().vertices)
                 body.append(f"\\addplot[color={colours(p.get_edgecolor())}, line width={p.get_linewidth():.2g}pt, "
-                            "mark=none, forget plot]\n"
-                            + _table([xa, xa + w, xa + w, xa, xa], [ya, ya, ya + h, ya + h, ya]))
+                            "mark=none, forget plot]\n" + _table(xy[:, 0], xy[:, 1]))
         for line in ax.get_lines():
             lo = _line_options(line, colours, lw_scale)
             label = _legend_label(line, ax) if legend else None
