@@ -30,7 +30,7 @@ import numpy as np
 
 from .._utils import FIELDS, Struct, log, row
 from ..contours import contour_semicircle, straight_path, tanh_contour
-from ..factorisation import fact_mult_scaled_auto_winding
+from ..factorisation import choose_tanh_height, fact_mult_scaled_auto_winding
 from ..inversion import dispersion_generic_nov2018, fourier_nov2018, y_continuous_scattering
 from ..kernels import (ff_kernel_hardsoft_noslip, ff_kernel_hardsoft_slip, ff_kernel_impedance,
                        impedance_up_down, kernel_generic, kernel_hardsoft)
@@ -51,14 +51,23 @@ def _contour(shift=0.0, height=1.0):
     return Struct(Cp=Cp, dCp=dCp, Cm=Cm, dCm=dCm)
 
 
+def _auto_contour(Kernel, Kff):
+    """Tanh contour (height chosen above all kernel zeros, see
+    :func:`..factorisation.choose_tanh_height`); the original used height 1."""
+    h, _ = choose_tanh_height(Kernel, Kff(0))
+    return _contour(0.0, h)
+
+
 def _hardsoft_kernel(k3, omega, U, c, delta, N_bl, contour, prec_N, branch_cut):
-    """Factorised hard -> soft kernel ``D_p / D_h`` with the slip / no-slip far field."""
+    """Factorised hard -> soft kernel ``D_p / D_h`` with the slip / no-slip far
+    field.  ``contour=None`` chooses the height automatically."""
     z_kernel = contour_semicircle(delta, 1)  # so the branch cut is in the LHP
     Kernel = lambda k1: kernel_hardsoft(k1, k3, omega, U, c, delta, N_bl, z_kernel)
     if U.f(0) != 0:
         Kff = lambda W: ff_kernel_hardsoft_slip(omega, U.f(0), c.f(0), k3, W)
     else:
         Kff = lambda W: ff_kernel_hardsoft_noslip(omega, U.df(0), c.f(0), k3, W)
+    contour = _auto_contour(Kernel, Kff) if contour is None else contour
     # winding chosen automatically (the original always used W = 0)
     K = fact_mult_scaled_auto_winding(Kernel, Kff, contour, Struct(N=prec_N), branch_cut)
     return Kernel, K
@@ -116,7 +125,7 @@ def hard_soft_continuous(U=None, c=None, delta=1.0, omega=20.0, k3=0.0, N_bl=100
     Dp_CLp = _dec(C_CLp.k, k3, omega, U, c, delta, N_bl, 1).p
     Dp_CLm = _dec(C_CLm.k, k3, omega, U, c, delta, N_bl, -1).p
 
-    _, K = _hardsoft_kernel(k3, omega, U, c, delta, N_bl, _contour(), prec_N, branch_cut)
+    _, K = _hardsoft_kernel(k3, omega, U, c, delta, N_bl, None, prec_N, branch_cut)
     A = -1j * P_up / K.m(kappa1)
     pole = lambda k: 1 / (k - kappa1)
     Kp = A * pole(Cp.k) / (K.p(Cp.k) * Dh_p)
@@ -227,7 +236,7 @@ def hard_soft_hard(U=None, c=None, delta=1.0, omega=1.0, k3=0.0, N_bl=1000, y2=0
     dec_CLm = _dec(C_CLm.k, k3, omega, U, c, delta, N_bl, -1)
     Dh_kappap = _dec(kappap, k3, omega, U, c, delta, N_bl, 1).v[0]
 
-    Kernel, K = _hardsoft_kernel(k3, omega, U, c, delta, N_bl, _contour(), prec_N, np.pi)
+    Kernel, K = _hardsoft_kernel(k3, omega, U, c, delta, N_bl, None, prec_N, np.pi)
     Kpp, Kmm = K.p(Cp.k), K.m(Cm.k)
     Km_CLp, Km_CLm = K.m(C_CLp.k), K.m(C_CLm.k)
     Km_kappa1 = K.m(kappa1)
@@ -345,6 +354,7 @@ def _impedance_kernel(Zu, Zd, k3, omega, U, c, delta, N_bl, contour, prec_N):
     z_kernel = contour_semicircle(delta, 1)
     Kernel = lambda k1: kernel_generic(k1, k3, omega, U, c, delta, Lu, Ld, N_bl, z_kernel)
     Kff = lambda W: ff_kernel_impedance(Zu, Zd, omega, U.f(0), c.f(0), k3, W)
+    contour = _auto_contour(Kernel, Kff) if contour is None else contour
     return Lu, Ld, fact_mult_scaled_auto_winding(Kernel, Kff, contour, Struct(N=prec_N), np.pi)
 
 
@@ -366,7 +376,7 @@ def imp_imp_continuous(Zu=1 - 1j, Zd=2 * (1 - 1j), U=None, c=None, delta=1.0, om
 
     Cp, Cm = sd_contours(N_C, omega, U.f(delta), c.f(delta), k3, apex, curvature, angle)
     C_CLp, C_CLm = cl_contours(N_CL, omega, U.f(delta), U.f(0), shift1, shift2)
-    Lu, Ld, K = _impedance_kernel(Zu, Zd, k3, omega, U, c, delta, N_bl, _contour(), prec_N)
+    Lu, Ld, K = _impedance_kernel(Zu, Zd, k3, omega, U, c, delta, N_bl, None, prec_N)
 
     N_inc = N_bl if incident == "regularised" else 10 * N_bl
     I_upstream, wall = incident_sheet(x1, x2, y2, kappa1, k3, omega, U, c, delta, N_inc, Lu,

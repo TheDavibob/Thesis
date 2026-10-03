@@ -179,7 +179,7 @@ Each fix is also flagged in the relevant docstring.
 | `Upstream_Distributed_B.m:45, 49` | `numel(x2_y2 == 1)` should be `numel(x2_y2) == 1`, and the `x2 == y2` branch reads `dec_y2.v`, which `_A` never stores (it crashes if a grid point hits a source height). | `_A` now stores `v`. |
 | `Integrand_Distributed.m:4` | Uses `y2` without it being an argument. | `y2` added as an argument. |
 | `Distributed_TrailingEdge.m:121` | `min(omega/Up.f(deltap), omega/Up.f(deltap))` uses `Up` twice; `Um` was meant for the second (as in the lined version). | Fixed. |
-| scripts, e.g. `HardSoft_Continuous_Nov2018.m:24-25`; `FFKernel_HardSoft_Slip.m` | The branch points use `sqrt(k0^2 + k3^2(1-M^2))`; the zeros of `gamma` need `-k3^2`. Only matters for `k3 ≠ 0`, and every script has `k3 = 0`. | Fixed in `pridmore_brown.branch_points`. Left in `ff_kernel_hardsoft_slip`, where it only enters when `W ≠ 0`. |
+| scripts, e.g. `HardSoft_Continuous_Nov2018.m:24-25`; `FFKernel_HardSoft_Slip.m` | The branch points use `sqrt(k0^2 + k3^2(1-M^2))`; the zeros of `gamma` need `-k3^2`. Only matters for `k3 ≠ 0`, and every script has `k3 = 0`. | Fixed in `pridmore_brown.branch_points`, which `ff_kernel_hardsoft_slip` now uses. |
 | `NewtonRaphson.m` | Has no iteration cap, so it can loop forever. | `max_iter=1000`, with a warning. |
 
 ## Suspicious, but left as the original has it
@@ -220,7 +220,9 @@ Each fix is also flagged in the relevant docstring.
   consistent at `y2 = delta/2`, as in Fig. 6.2.2. The scattered field is
   consistent with the wall value, so only the incident part above the sheet is
   affected. The regular form uses one-sided limits `p = lim(-C^3 phi)`, as
-  `Distributed_WallPressure` does with `shift_y2`. Not yet changed in the port.
+  `Distributed_WallPressure` does with `shift_y2`. The port's scripts now default to
+  `incident="regularised"` (`inversion.y_greens_convected`); `incident="original"`
+  reproduces the MATLAB (used for Fig. 6.2.2).
 * **Critical-layer branch for `D(kappa1)`.** At `kappa1 = omega/U(y2)`, the
   dispersion function needs `phi_d` continued through the source's own
   critical level, and the two ways round give complex conjugates. Causality
@@ -251,10 +253,9 @@ Each fix is also flagged in the relevant docstring.
   The trailing-edge code now chooses the contour height automatically
   (`trailing_edge._wake_contour`: the lowest height whose winding matches
   that of the tallest, so no wake mode lies above it). Contours of height 2–4
-  then agree to 4–5 digits. The hard→soft and impedance scripts still use the
-  fixed height-1 contour, which is adequate at `omega = 1` (their defaults) but
-  should get the same treatment before being used at higher frequency or
-  shear.
+  then agree to 4–5 digits. The full-field hard→soft and impedance scripts
+  choose their height the same way (`scattering._auto_contour`); their
+  far-field versions keep the original shifted height-3 contours.
 * **Veitch contour in `FarField_TrailingEdge_Lined.m`.** The factorisation
   contour is centred on the requested saddle points, so the answer depends on
   which observer angles are asked for. For a single angle (as in

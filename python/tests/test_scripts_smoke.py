@@ -143,3 +143,29 @@ def test_diagnostics():
     assert np.all(np.isfinite(g.W))
     w = diagnostics.scrappy_wronskian(shift=0.01, y2=[0.2, 0.5], N_bl=200)
     assert np.all(np.isfinite(w.W))
+
+
+def test_far_field_matches_near_field_inversion():
+    """Saddle-point far field (with the physical normalisation) against direct
+    near-field inversion at large r, same forcing (regularised vortex sheet).
+    Guards the whole far-field pipeline: factorisation (winding, contour),
+    saddle evaluation and amplitude scaling."""
+    from shear_flow_scattering.profiles import c_const, u_parabolic
+    from shear_flow_scattering.scripts.common import incident_sheet, wall_operators
+    from shear_flow_scattering.steepest_descent import far_field_saddle
+    U, c, om, y2 = u_parabolic(0.3, 1, 1), c_const(5.0), 5.0, 0.5
+    th, r = np.radians(120), 30.0
+    x1, x2 = r * np.cos(th), r * np.sin(th)
+    nf = trailing_edge.trailing_edge_lined(Up=U, Um=U, cp=c, cm=c, omega=om, Z=np.inf, y2=y2,
+                                           x1=np.array([x1]), x2=np.array([-0.5, x2]),
+                                           N_bl=500, N_C=400, N_CL=150, prec_N=1500)
+    near = np.sqrt(r) * abs(nf.I_scattered.p[0, 1])
+    _, wall = incident_sheet(None, None, y2, om / U.f(y2), 0.0, om, U, c, 1.0, 500,
+                             wall_operators(om, U).hard)
+    ff = trailing_edge.far_field_trailing_edge_lined(Up=U, Um=U, cp=c, cm=c, omega=om, N_bl=500,
+                                                     prec_N=1500, theta1=[th], theta2=[np.pi + 0.3],
+                                                     pressure_upstream=wall.p, kappa1=om / U.f(y2))
+    sd = far_field_saddle([th], om, 1.0, 5.0)
+    far = abs(np.ravel(ff.FF1p.p)[0]) * np.sqrt(sd.K0 / (2 * np.pi)) \
+        * (np.cos(th) ** 2 + sd.beta ** 2 * np.sin(th) ** 2) ** -0.25
+    assert np.isclose(near, far, rtol=0.03)

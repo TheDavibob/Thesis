@@ -15,7 +15,7 @@ import numpy as np
 
 from ._utils import Path, Struct, log
 from .complex_funcs import power_a
-from .pridmore_brown import comp_dec_aug18a_skip, gamma_ff
+from .pridmore_brown import branch_points, comp_dec_aug18a_skip, gamma_ff
 
 
 def _ff_power(A, alpha, beta, kbp, kbm) -> Struct:
@@ -121,10 +121,9 @@ def ff_kernel_hardsoft_slip(omega, U0, c0, k3, W) -> Struct:
     C = lambda k1: 1j * (omega - U0 * k1)
     M = U0 / c0
     k0 = omega / c0
-    # NOTE: same k3 sign slip as the scripts (see pridmore_brown.branch_points);
-    # irrelevant when W == 0, which is how every script calls this.
-    kb1 = -M / (1 - M ** 2) * k0 + np.sqrt(k0 ** 2 + k3 ** 2 * (1 - M ** 2)) / (1 - M ** 2)
-    kb2 = -M / (1 - M ** 2) * k0 - np.sqrt(k0 ** 2 + k3 ** 2 * (1 - M ** 2)) / (1 - M ** 2)
+    # Bug fixed: the original had +k3^2 (as the scripts did); it matters now that
+    # W can be non-zero (automatic winding correction).
+    kb1, kb2 = branch_points(omega, U0, c0, k3)
     kp, km = kb2, kb1
     return Struct(
         f=lambda k1: -(C(k1) / gamma(k1)) * (k1 - kp) ** W / (k1 - km) ** W,

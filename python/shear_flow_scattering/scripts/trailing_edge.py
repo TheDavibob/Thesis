@@ -27,7 +27,7 @@ from .._utils import FIELD_SIGN_BELOW, FIELDS, Struct, log, row
 from ..contours import contour_semicircle, tanh_contour, veitch_contour
 from ..distributed import (distributed_wall_pressure, distribution_weight, fbar, kappa1_quad, upstream_distributed_a,
                            upstream_distributed_b, upstream_distributed_integrated)
-from ..factorisation import fact_mult_scaled_auto_winding, winding_number
+from ..factorisation import choose_tanh_height, fact_mult_scaled_auto_winding, winding_number
 from ..inversion import (dispersion_generic_nov2018, fourier_nov2018, integral_nov2018,
                          y_continuous_scattering, y_greens_generic)
 from ..kernels import ff_wake_kernel, wake_kernel
@@ -98,19 +98,9 @@ def _wake_contour(k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl, heights=(1
     z1, z2 = contour_semicircle(deltap, 1), contour_semicircle(deltam, 1)
     Kernel = lambda k1: wake_kernel(k1, k3, omega, Up, cp, deltap, Um, cm, deltam, Z, N_bl, z1, z2)
     Kff = ff_wake_kernel(k3, omega, Up.f(0), cp.f(0), Up.df(0), -Um.df(0), Z, 0)
-    wind = {}
-
-    def w(h):
-        if h not in wind:
-            wind[h] = winding_number(lambda k: Kernel(k) / Kff.f(k), tanh_contour(0, h, -1, 1)[0])
-        return wind[h]
-
-    target = w(heights[-1])
-    b = heights[0] if w(heights[0]) == target else next(h for h in heights[1:] if w(h) == target)
-    if b != heights[0]:
-        log.info("wake mode(s) above the height-%g contour; using height %g", heights[0], b)
+    b, wnd = choose_tanh_height(Kernel, Kff, heights)
     ct = tanh_factor_contour(b)
-    ct.winding = w(b)        # winding of K/Kff(W=0) along it: W = -winding cancels it
+    ct.winding = wnd         # winding of K/Kff(W=0) along it: W = -winding cancels it
     return ct
 
 

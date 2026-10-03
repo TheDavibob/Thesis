@@ -195,6 +195,34 @@ def winding_number(G: Callable, C: Callable, t_max=200.0, n=None) -> int:
     return int(np.round((ph[-1] - ph[0]) / (2 * np.pi)))
 
 
+def choose_tanh_height(G: Callable, Gff0: Struct, heights=(1, 2, 3, 4)):
+    """Height of a tanh factorisation contour ``t + i h tanh(t)`` lying above
+    every zero of ``G`` in the upper half-plane (within ``max(heights)``).
+
+    Zeros of a Wiener-Hopf kernel that is a ratio of dispersion functions
+    (downstream / upstream) are downstream modes, which by Briggs-Bers must lie
+    below the factorisation contour; unstable ones rise with frequency and
+    shear and can cross a fixed height-1 contour.  Raising the contour changes
+    the winding of ``G/Gff`` once per zero crossed, so the lowest height whose
+    winding matches the tallest has all those zeros below it.  Returns
+    ``(height, winding of G/Gff0 along it)``.
+    """
+    from .contours import tanh_contour
+
+    wind = {}
+
+    def w(h):
+        if h not in wind:
+            wind[h] = winding_number(lambda k: G(k) / Gff0.f(k), tanh_contour(0, h, -1, 1)[0])
+        return wind[h]
+
+    target = w(heights[-1])
+    b = heights[0] if w(heights[0]) == target else next(h for h in heights[1:] if w(h) == target)
+    if b != heights[0]:
+        log.info("kernel zero(s) above the height-%g contour; using height %g", heights[0], b)
+    return b, w(b)
+
+
 def fact_mult_scaled_auto_winding(G: Callable, Gff_of_W: Callable, contour: Struct, prec: Struct,
                                   branch_cut, W="auto", max_W=3) -> Struct:
     """:func:`fact_mult_cont_scaled_finite` with the far-field winding chosen

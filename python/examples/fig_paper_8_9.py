@@ -109,6 +109,23 @@ def db(x):
 
 STYLE = {"fit": dict(ls="-", lw=1.8), "two-piece": dict(ls="none", marker="o", ms=5)}
 
+#: Two-piece points flagged unreliable by the solver (see fig89_full.log):
+#: a source at the profile join puts the critical point on the U'' jump, and
+#: for the sheared case at higher frequency the kernel's critical points could
+#: not be passed within one analytic piece.  (fit route: no warnings.)
+JOIN = {"base": 0.1, "sheared": 0.3}
+FF_FLAGGED = {"sheared": [412, 1701, 10000]}   # Hz, far field only
+
+
+def masked(route, name, what, val):
+    """Apply the reliability mask to a two-piece series."""
+    if route != "two-piece":
+        return val
+    val = val.copy()
+    for f in FF_FLAGGED.get(name, []) if what == "pff" else []:
+        val[np.isclose(F_HZ, f, rtol=0.01)] = np.nan
+    return val
+
 
 def plot(res):
     import matplotlib.pyplot as plt
@@ -122,18 +139,21 @@ def plot(res):
                     if (route, name) not in res:
                         continue
                     pw, T = res[(route, name)]
-                    val = pw[:, j] if what == "pw" else pw[:, j] * T[:, j]
+                    if route == "two-piece" and np.isclose(y, JOIN[name]):
+                        continue
+                    val = masked(route, name, what, pw[:, j] if what == "pw" else pw[:, j] * T[:, j])
                     ax.plot(F_HZ, db(val), color=f"C{j}",
                             label=(f"$y_2 = {y}\\delta$" if route == "fit" else None), **STYLE[route])
             ax.set_xscale("log")
+            ax.set_ylim(-250, 10)
             label = "Wall" if what == "pw" else "Far-field"
             ax.set_title(f"({'abcd'[2 * row + col]}) {label} pressure, {name} case")
             ax.set_ylabel(r"$20\log_{10}|p_w|$" if what == "pw" else r"$20\log_{10}|p_{ff}|$")
             if row == 1:
                 ax.set_xlabel("Frequency, f (Hz)")
     axes[0, 0].legend(fontsize=8)
-    fig.suptitle("Corrected Fig. 8 -- lines: analytic fits; circles: two-piece profiles (indented paths)",
-                 fontsize=10)
+    fig.suptitle("Corrected Fig. 8 -- lines: analytic fits; circles: two-piece profiles (indented paths; "
+                 "points flagged unreliable omitted)", fontsize=10)
     fig.savefig(stem + "_fig8.png", dpi=130)
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4), constrained_layout=True, sharey=True)
@@ -142,13 +162,17 @@ def plot(res):
             for route in ROUTES:
                 if (route, "base") not in res or (route, "sheared") not in res:
                     continue
+                if route == "two-piece" and any(np.isclose(y, v) for v in JOIN.values()):
+                    continue
                 pb, Tb = res[(route, "base")]
                 ps, Ts = res[(route, "sheared")]
                 r = ps[:, j] / pb[:, j] if what == "pw" else ps[:, j] * Ts[:, j] / (pb[:, j] * Tb[:, j])
+                r = masked(route, "sheared", what, r)
                 ax.plot(F_HZ, db(r), color=f"C{j}",
                         label=(f"$y_2 = {y}\\delta$" if route == "fit" else None), **STYLE[route])
         ax.axhline(0, color="k", lw=0.6)
         ax.set_xscale("log")
+        ax.set_ylim(-80, 40)
         ax.set_xlabel("Frequency, f (Hz)")
         ax.set_title("(a) wall pressure, sheared / base" if what == "pw" else "(b) far field, sheared / base")
     axes[0].set_ylabel("dB")
