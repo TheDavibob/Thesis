@@ -1,0 +1,169 @@
+% This file was created by shear_flow_scattering.tikz (matlab2tikz-compatible).
+%
+\definecolor{mycolor1}{rgb}{0.12157,0.46667,0.70588}%
+\definecolor{mycolor2}{rgb}{1.00000,0.49804,0.05490}%
+\definecolor{mycolor3}{rgb}{0.17255,0.62745,0.17255}%
+\definecolor{mycolor4}{rgb}{0.83922,0.15294,0.15686}%
+\definecolor{mycolor5}{rgb}{0.58039,0.40392,0.74118}%
+%
+\begin{tikzpicture}
+
+\begin{axis}[%
+width=0.951\fwidth,
+height=\fheight,
+xmin=100,
+xmax=5000,
+ymin=-40,
+ymax=20,
+xmode=log,
+log basis x=10,
+xtick={100,1000},
+minor xtick={200,300,400,500,600,700,800,900,2000,3000,4000,5000},
+xlabel={Frequency, f (Hz)},
+unbounded coords=jump,
+scale only axis,
+title={(b) Far field, sheared / base}
+]
+\addplot[color=mycolor1, line width=1.8pt, mark=none, forget plot]
+table[row sep=crcr]{%
+100	12.0197\\
+142.51	12.3026\\
+203.092	11.5362\\
+289.427	10.0186\\
+412.463	7.96716\\
+587.802	5.53269\\
+837.678	2.65095\\
+1193.78	-0.93517\\
+1701.25	-5.6266\\
+2424.46	-11.8877\\
+3455.11	-20.2006\\
+4923.88	-31.8475\\
+7017.04	-43.4719\\
+10000	-79.6469\\
+};
+\addplot[color=mycolor2, line width=1.8pt, mark=none, forget plot]
+table[row sep=crcr]{%
+100	-0.115153\\
+142.51	2.57773\\
+203.092	4.44663\\
+289.427	5.41875\\
+412.463	5.44444\\
+587.802	4.68022\\
+837.678	3.26775\\
+1193.78	1.21295\\
+1701.25	-1.66466\\
+2424.46	-5.69579\\
+3455.11	-11.3652\\
+4923.88	-18.7704\\
+7017.04	-33.2391\\
+10000	-36.298\\
+};
+\addplot[color=mycolor2, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor2}, forget plot]
+table[row sep=crcr]{%
+100	-2.80362\\
+142.51	nan\\
+203.092	nan\\
+289.427	nan\\
+412.463	nan\\
+587.802	nan\\
+837.678	nan\\
+1193.78	nan\\
+1701.25	nan\\
+2424.46	nan\\
+3455.11	nan\\
+4923.88	nan\\
+7017.04	nan\\
+10000	nan\\
+};
+\addplot[color=mycolor3, line width=1.8pt, mark=none, forget plot]
+table[row sep=crcr]{%
+100	-6.92289\\
+142.51	-4.66075\\
+203.092	-2.08065\\
+289.427	-0.0641594\\
+412.463	1.26363\\
+587.802	1.92742\\
+837.678	1.92826\\
+1193.78	1.28321\\
+1701.25	-0.09603\\
+2424.46	-2.38567\\
+3455.11	-5.90284\\
+4923.88	-10.5096\\
+7017.04	-17.9549\\
+10000	-38.6292\\
+};
+\addplot[color=mycolor4, line width=1.8pt, mark=none, forget plot]
+table[row sep=crcr]{%
+100	0.482586\\
+142.51	-1.19329\\
+203.092	-0.946947\\
+289.427	0.0466928\\
+412.463	1.00212\\
+587.802	1.67347\\
+837.678	1.88622\\
+1193.78	1.5798\\
+1701.25	0.626233\\
+2424.46	-1.12337\\
+3455.11	-3.89847\\
+4923.88	-8.39541\\
+7017.04	-11.5283\\
+10000	-15.7682\\
+};
+\addplot[color=mycolor4, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor4}, forget plot]
+table[row sep=crcr]{%
+100	4.58459\\
+142.51	nan\\
+203.092	nan\\
+289.427	nan\\
+412.463	nan\\
+587.802	nan\\
+837.678	nan\\
+1193.78	nan\\
+1701.25	nan\\
+2424.46	nan\\
+3455.11	nan\\
+4923.88	nan\\
+7017.04	nan\\
+10000	nan\\
+};
+\addplot[color=mycolor5, line width=1.8pt, mark=none, forget plot]
+table[row sep=crcr]{%
+100	10.0803\\
+142.51	8.86885\\
+203.092	5.74213\\
+289.427	4.47524\\
+412.463	4.08304\\
+587.802	3.91535\\
+837.678	3.59314\\
+1193.78	2.99558\\
+1701.25	1.94269\\
+2424.46	0.275149\\
+3455.11	-2.22359\\
+4923.88	-5.58284\\
+7017.04	-11.3988\\
+10000	-24.3619\\
+};
+\addplot[color=mycolor5, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor5}, forget plot]
+table[row sep=crcr]{%
+100	4.67742\\
+142.51	nan\\
+203.092	nan\\
+289.427	nan\\
+412.463	nan\\
+587.802	nan\\
+837.678	nan\\
+1193.78	nan\\
+1701.25	nan\\
+2424.46	nan\\
+3455.11	nan\\
+4923.88	nan\\
+7017.04	nan\\
+10000	nan\\
+};
+\addplot[color=black, line width=0.6pt, mark=none, forget plot]
+table[row sep=crcr]{%
+100	0\\
+5000	0\\
+};
+\end{axis}
+\end{tikzpicture}%

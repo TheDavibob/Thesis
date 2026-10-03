@@ -1,0 +1,176 @@
+% This file was created by shear_flow_scattering.tikz (matlab2tikz-compatible).
+%
+\definecolor{mycolor1}{rgb}{0.12157,0.46667,0.70588}%
+\definecolor{mycolor2}{rgb}{1.00000,0.49804,0.05490}%
+\definecolor{mycolor3}{rgb}{0.17255,0.62745,0.17255}%
+\definecolor{mycolor4}{rgb}{0.83922,0.15294,0.15686}%
+\definecolor{mycolor5}{rgb}{0.58039,0.40392,0.74118}%
+%
+\begin{tikzpicture}
+
+\begin{axis}[%
+width=0.951\fwidth,
+height=\fheight,
+xmin=100,
+xmax=5000,
+ymin=-40,
+ymax=20,
+xmode=log,
+log basis x=10,
+xtick={100,1000},
+minor xtick={200,300,400,500,600,700,800,900,2000,3000,4000,5000},
+xlabel={Frequency, f (Hz)},
+ylabel={dB},
+unbounded coords=jump,
+scale only axis,
+title={(a) Wall pressure, sheared / base},
+legend style={legend cell align=left, align=left, draw=white!15!black, font=\footnotesize}
+]
+\addplot[color=mycolor1, line width=1.8pt, mark=none]
+table[row sep=crcr]{%
+100	11.6242\\
+142.51	11.7338\\
+203.092	10.9613\\
+289.427	9.67948\\
+412.463	8.07743\\
+587.802	6.12587\\
+837.678	3.64355\\
+1193.78	0.343875\\
+1701.25	-4.15369\\
+2424.46	-10.364\\
+3455.11	-19.0245\\
+4923.88	-31.2022\\
+7017.04	-48.4266\\
+10000	-72.8794\\
+};
+\addlegendentry{$y_2 = 0.1\delta$}
+\addplot[color=mycolor2, line width=1.8pt, mark=none]
+table[row sep=crcr]{%
+100	-1.06238\\
+142.51	1.41716\\
+203.092	3.20157\\
+289.427	4.29362\\
+412.463	4.64503\\
+587.802	4.27443\\
+837.678	3.21853\\
+1193.78	1.43031\\
+1701.25	-1.26141\\
+2424.46	-5.17113\\
+3455.11	-10.7882\\
+4923.88	-18.8301\\
+7017.04	-30.3278\\
+10000	-46.7564\\
+};
+\addlegendentry{$y_2 = 0.2\delta$}
+\addplot[color=mycolor2, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor2}, forget plot]
+table[row sep=crcr]{%
+100	-3.83435\\
+142.51	nan\\
+203.092	nan\\
+289.427	nan\\
+412.463	4.74138\\
+587.802	nan\\
+837.678	nan\\
+1193.78	nan\\
+1701.25	-1.08351\\
+2424.46	nan\\
+3455.11	nan\\
+4923.88	nan\\
+7017.04	nan\\
+10000	-45.9006\\
+};
+\addplot[color=mycolor3, line width=1.8pt, mark=none]
+table[row sep=crcr]{%
+100	-8.04168\\
+142.51	-6.00078\\
+203.092	-3.53201\\
+289.427	-1.44028\\
+412.463	0.158391\\
+587.802	1.16768\\
+837.678	1.50526\\
+1193.78	1.11533\\
+1701.25	-0.0825872\\
+2424.46	-2.24983\\
+3455.11	-5.66912\\
+4923.88	-10.7846\\
+7017.04	-18.2582\\
+10000	-29.0548\\
+};
+\addlegendentry{$y_2 = 0.3\delta$}
+\addplot[color=mycolor4, line width=1.8pt, mark=none]
+table[row sep=crcr]{%
+100	-0.662903\\
+142.51	-2.55974\\
+203.092	-2.43466\\
+289.427	-1.38671\\
+412.463	-0.18845\\
+587.802	0.797615\\
+837.678	1.34002\\
+1193.78	1.28196\\
+1701.25	0.507075\\
+2424.46	-1.12127\\
+3455.11	-3.81885\\
+4923.88	-7.92974\\
+7017.04	-13.9784\\
+10000	-22.7392\\
+};
+\addlegendentry{$y_2 = 0.4\delta$}
+\addplot[color=mycolor4, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor4}, forget plot]
+table[row sep=crcr]{%
+100	3.39175\\
+142.51	nan\\
+203.092	nan\\
+289.427	nan\\
+412.463	2.2571\\
+587.802	nan\\
+837.678	nan\\
+1193.78	nan\\
+1701.25	0.907627\\
+2424.46	nan\\
+3455.11	nan\\
+4923.88	nan\\
+7017.04	nan\\
+10000	-24.0167\\
+};
+\addplot[color=mycolor5, line width=1.8pt, mark=none]
+table[row sep=crcr]{%
+100	8.93353\\
+142.51	7.50275\\
+203.092	4.24937\\
+289.427	3.02341\\
+412.463	2.85518\\
+587.802	2.97659\\
+837.678	2.98275\\
+1193.78	2.62854\\
+1701.25	1.75234\\
+2424.46	0.205493\\
+3455.11	-2.21183\\
+4923.88	-5.80091\\
+7017.04	-11.0129\\
+10000	-18.5095\\
+};
+\addlegendentry{$y_2 = 0.5\delta$}
+\addplot[color=mycolor5, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor5}, forget plot]
+table[row sep=crcr]{%
+100	3.47525\\
+142.51	nan\\
+203.092	nan\\
+289.427	nan\\
+412.463	2.98095\\
+587.802	nan\\
+837.678	nan\\
+1193.78	nan\\
+1701.25	1.90497\\
+2424.46	nan\\
+3455.11	nan\\
+4923.88	nan\\
+7017.04	nan\\
+10000	-17.4722\\
+};
+\addplot[color=black, line width=0.6pt, mark=none, forget plot]
+table[row sep=crcr]{%
+100	0\\
+5000	0\\
+};
+\end{axis}
+\end{tikzpicture}%

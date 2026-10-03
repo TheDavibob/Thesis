@@ -1,0 +1,181 @@
+% This file was created by shear_flow_scattering.tikz (matlab2tikz-compatible).
+%
+\definecolor{mycolor1}{rgb}{0.12157,0.46667,0.70588}%
+\definecolor{mycolor2}{rgb}{1.00000,0.49804,0.05490}%
+\definecolor{mycolor3}{rgb}{0.17255,0.62745,0.17255}%
+\definecolor{mycolor4}{rgb}{0.83922,0.15294,0.15686}%
+\definecolor{mycolor5}{rgb}{0.58039,0.40392,0.74118}%
+%
+\begin{tikzpicture}
+
+\begin{axis}[%
+width=0.951\fwidth,
+height=\fheight,
+xmin=100,
+xmax=5000,
+ymin=-250,
+ymax=10,
+xmode=log,
+log basis x=10,
+xtick={100,1000},
+minor xtick={200,300,400,500,600,700,800,900,2000,3000,4000,5000},
+ylabel={$20\log_{10}|p_w|$},
+unbounded coords=jump,
+scale only axis,
+title={(b) Wall pressure, sheared case}
+]
+\addplot[color=mycolor1, line width=1.8pt, mark=none, forget plot]
+table[row sep=crcr]{%
+100	-14.7149\\
+142.51	-15.2772\\
+203.092	-16.8834\\
+289.427	-19.2919\\
+412.463	-22.4961\\
+587.802	-26.7798\\
+837.678	-32.6874\\
+1193.78	-41.0293\\
+1701.25	-52.9348\\
+2424.46	-69.9669\\
+3455.11	-94.3193\\
+4923.88	-129.103\\
+7017.04	-178.747\\
+10000	-249.57\\
+};
+\addplot[color=mycolor1, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor1}, forget plot]
+table[row sep=crcr]{%
+100	-13.7962\\
+142.51	nan\\
+203.092	nan\\
+289.427	nan\\
+412.463	-22.6509\\
+587.802	nan\\
+837.678	nan\\
+1193.78	nan\\
+1701.25	-53.1272\\
+2424.46	nan\\
+3455.11	nan\\
+4923.88	nan\\
+7017.04	nan\\
+10000	-250.414\\
+};
+\addplot[color=mycolor2, line width=1.8pt, mark=none, forget plot]
+table[row sep=crcr]{%
+100	-22.1747\\
+142.51	-21.7428\\
+203.092	-22.0309\\
+289.427	-23.4003\\
+412.463	-26.3115\\
+587.802	-31.2752\\
+837.678	-38.9755\\
+1193.78	-50.4453\\
+1701.25	-67.2024\\
+2424.46	-91.4254\\
+3455.11	-126.229\\
+4923.88	-176.063\\
+7017.04	-247.282\\
+10000	-348.962\\
+};
+\addplot[color=mycolor2, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor2}, forget plot]
+table[row sep=crcr]{%
+100	-22.8178\\
+142.51	nan\\
+203.092	nan\\
+289.427	nan\\
+412.463	-25.3774\\
+587.802	nan\\
+837.678	nan\\
+1193.78	nan\\
+1701.25	-66.8445\\
+2424.46	nan\\
+3455.11	nan\\
+4923.88	nan\\
+7017.04	nan\\
+10000	-348.181\\
+};
+\addplot[color=mycolor3, line width=1.8pt, mark=none, forget plot]
+table[row sep=crcr]{%
+100	-25.3686\\
+142.51	-25.6127\\
+203.092	-26.5083\\
+289.427	-28.3752\\
+412.463	-31.8105\\
+587.802	-37.6703\\
+837.678	-47.0509\\
+1193.78	-61.3707\\
+1701.25	-82.5742\\
+2424.46	-113.425\\
+3455.11	-157.888\\
+4923.88	-221.643\\
+7017.04	-312.823\\
+10000	-443.055\\
+};
+\addplot[color=mycolor4, line width=1.8pt, mark=none, forget plot]
+table[row sep=crcr]{%
+100	-23.7125\\
+142.51	-25.2392\\
+203.092	-27.3684\\
+289.427	-30.442\\
+412.463	-35.2003\\
+587.802	-42.7136\\
+837.678	-54.3802\\
+1193.78	-72.0023\\
+1701.25	-98.0026\\
+2424.46	-135.776\\
+3455.11	-190.168\\
+4923.88	-268.119\\
+7017.04	-379.565\\
+10000	-538.722\\
+};
+\addplot[color=mycolor4, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor4}, forget plot]
+table[row sep=crcr]{%
+100	-19.0398\\
+142.51	nan\\
+203.092	nan\\
+289.427	nan\\
+412.463	-32.9698\\
+587.802	nan\\
+837.678	nan\\
+1193.78	nan\\
+1701.25	-97.6431\\
+2424.46	nan\\
+3455.11	nan\\
+4923.88	nan\\
+7017.04	nan\\
+10000	-540.01\\
+};
+\addplot[color=mycolor5, line width=1.8pt, mark=none, forget plot]
+table[row sep=crcr]{%
+100	-19.0553\\
+142.51	-19.0387\\
+203.092	-23.7571\\
+289.427	-29.1861\\
+412.463	-36.0537\\
+587.802	-45.8271\\
+837.678	-60.249\\
+1193.78	-81.4894\\
+1701.25	-112.435\\
+2424.46	-157.107\\
+3455.11	-221.225\\
+4923.88	-312.963\\
+7017.04	-444.016\\
+10000	-631.11\\
+};
+\addplot[color=mycolor5, draw=none, line width=1.5pt, mark=*, mark size=2pt, mark options={solid, fill=mycolor5}, forget plot]
+table[row sep=crcr]{%
+100	-24.2502\\
+142.51	nan\\
+203.092	nan\\
+289.427	nan\\
+412.463	-35.6733\\
+587.802	nan\\
+837.678	nan\\
+1193.78	nan\\
+1701.25	-112.243\\
+2424.46	nan\\
+3455.11	nan\\
+4923.88	nan\\
+7017.04	nan\\
+10000	-630.176\\
+};
+\end{axis}
+\end{tikzpicture}%

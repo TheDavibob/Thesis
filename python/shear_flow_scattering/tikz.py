@@ -232,9 +232,21 @@ def save_tikz(ax, path, width=r"0.951\fwidth", height=r"\fheight", graphics_dir=
                          f"point meta min={_num(m.norm.vmin)}", f"point meta max={_num(m.norm.vmax)}"]
                 if getattr(m, "colorbar", None) is not None:
                     opts.append("colorbar")
-                    clabel = m.colorbar.ax.get_ylabel()
-                    if clabel:
-                        opts.append(f"colorbar style={{ylabel={{{clabel}}}}}")
+                    cax = m.colorbar.ax
+                    cstyle = []
+                    if cax.get_ylabel():
+                        cstyle.append(f"ylabel={{{cax.get_ylabel()}}}")
+                    ticks = [t for t in cax.get_yticks() if m.norm.vmin - 1e-12 <= t <= m.norm.vmax + 1e-12]
+                    labels = [t.get_text() for t in cax.get_yticklabels()]
+                    if ticks and labels and all(labels) and len(labels) == len(cax.get_yticks()):
+                        keep = [l for t, l in zip(cax.get_yticks(), labels)
+                                if m.norm.vmin - 1e-12 <= t <= m.norm.vmax + 1e-12]
+                        # only when matplotlib was given explicit labels (e.g. multiples of pi)
+                        if any(l.startswith("$") for l in keep):
+                            cstyle.append(f"ytick={{{','.join(_num(t) for t in ticks)}}}")
+                            cstyle.append("yticklabels={" + ",".join("{" + l + "}" for l in keep) + "}")
+                    if cstyle:
+                        opts.append("colorbar style={" + ", ".join(cstyle) + "}")
         grid = None
         for a in "xy":
             lines = getattr(ax, f"{a}axis").get_gridlines()
