@@ -398,22 +398,16 @@ def _fig11_dh(K):
     return D
 
 
-ZOOM_11 = (4.6, 5.4, -0.4, 0.4)
-
-
 def fig11():
     def compute():
-        kr, ki = np.linspace(-3, 6, 451), np.linspace(-1.5, 1.5, 151)
+        # Im k1 down to -2.5: the deformed critical layer reaches about -2.1i
+        kr, ki = np.linspace(-3, 6, 451), np.linspace(-2.5, 1.5, 201)
         D = _fig11_dh(kr[None, :] + 1j * ki[:, None]).reshape(ki.size, kr.size)
-        a, b, lo, hi = ZOOM_11
-        zr, zi = np.linspace(a, b, 241), np.linspace(lo, hi, 241)
-        Dz = _fig11_dh(zr[None, :] + 1j * zi[:, None]).reshape(zi.size, zr.size)
-        return dict(kr=kr, ki=ki, D=D, zr=zr, zi=zi, Dz=Dz)
+        return dict(kr=kr, ki=ki, D=D)
 
     d = cached("fig11", compute)
     import colorcet as cc
     import matplotlib.pyplot as plt
-    from matplotlib.patches import Rectangle
     from shear_flow_scattering.profiles import u_parabolic
 
     t = np.linspace(0, 1, 4001)                                        # the deformed critical layer
@@ -459,20 +453,16 @@ def fig11():
                                 "brightness: $\log_{10}|D_h|$"),
                                ("banded", "fig11alt_dispersion_function_phase_banded",
                                 "brightness bands: equal steps in $\log_{10}|D_h|$")):
-        fig, (a, b) = plt.subplots(1, 2, figsize=(12, 3.8), constrained_layout=True,
-                                   gridspec_kw=dict(width_ratios=[2.6, 1]))
+        fig, a = plt.subplots(figsize=(9, 4.6), constrained_layout=True)
         im = panel(a, d["kr"], d["ki"], d["D"], 0.04,
-                   r"(a) $D_h = v_d(0)$ via $C^+$, $U_0 = 0.2U_\infty$, $\omega = 1$", mode)
-        x0, x1, y0, y1 = ZOOM_11
-        a.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, ec="k", lw=0.8))
+                   r"$D_h = v_d(0)$ via $C^+$, $U_0 = 0.2U_\infty$, $\omega = 1$", mode)
         a.legend(loc="upper left", fontsize=8)
-        panel(b, d["zr"], d["zi"], d["Dz"], 0.004, r"(b) near $k_1 = \omega/U_0$", mode)
-        cb = fig.colorbar(ScalarMappable(norm, cmap), ax=[a, b], pad=0.01,
+        cb = fig.colorbar(ScalarMappable(norm, cmap), ax=a, pad=0.01,
                           ticks=[-np.pi, -np.pi / 2, 0, np.pi / 2, np.pi])
         cb.ax.set_yticklabels([r"$-\pi$", r"$-\pi/2$", "0", r"$\pi/2$", r"$\pi$"])
         cb.set_label(r"arg $D_h$ (" + blabel + ")")
         im.colorbar = cb
-        save(fig, stem, ["dispersion_function_phase", "near_wall_critical_point"])
+        save(fig, stem, ["dispersion_function_phase"])
 
 
 # --------------------------------------------------------------------------
