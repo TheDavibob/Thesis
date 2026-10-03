@@ -91,6 +91,13 @@ def _line_options(line, colours, lw_scale):
     return opts
 
 
+def _axes_fraction_to_data(s, lim, scale):
+    a, b = lim
+    if scale == "log":
+        return 10 ** (np.log10(a) + s * (np.log10(b) - np.log10(a)))
+    return a + s * (b - a)
+
+
 def _legend_label(line, ax):
     label = line.get_label()
     shown = ax.get_legend() is not None and not label.startswith("_")
@@ -149,7 +156,8 @@ def _polar(ax, colours, lw_scale, legend):
         lx, ly = to_xy(a, 1.12 * rmax)
         body.append(f"\\node at (axis cs:{lx:.4g},{ly:.4g}) {{${np.rad2deg(a):.0f}^\\circ$}};\n")
     lab = np.deg2rad(22.5)
-    for r in [r for r in ax.get_yticks() if 0 < r <= rmax * (1 + 1e-9)]:
+    # label every other ring, skipping the crowded centre
+    for r in [r for r in ax.get_yticks()[::-1][::2] if 0.3 * rmax < r <= rmax * (1 + 1e-9)]:
         lx, ly = to_xy(lab, r)
         body.append(f"\\node[anchor=south west, font=\\scriptsize] at (axis cs:{lx:.4g},{ly:.4g}) {{{r:g}}};\n")
     for line in ax.get_lines():
@@ -197,7 +205,15 @@ def save_tikz(ax, path, width=r"0.951\fwidth", height=r"\fheight", graphics_dir=
             opts.append("y dir=reverse")
         for a in "xy":
             if getattr(ax, f"get_{a}scale")() == "log":
-                opts += [f"{a}mode=log", f"{a}minorticks=true"]
+                lo, hi = sorted(getattr(ax, f"get_{a}lim")())
+                inside = lambda ts: [t for t in ts if lo * (1 - 1e-9) <= t <= hi * (1 + 1e-9)]
+                opts += [f"{a}mode=log", f"log basis {a}=10"]
+                major = inside(getattr(ax, f"get_{a}ticks")())
+                if major:   # matplotlib's whole decades; pgfplots would pick 10^2.2 etc.
+                    opts.append(f"{a}tick={{{','.join(_num(t) for t in major)}}}")
+                minor = inside(getattr(ax, f"get_{a}ticks")(minor=True))
+                if minor:
+                    opts.append(f"minor {a}tick={{{','.join(_num(t) for t in minor)}}}")
             label = getattr(ax, f"get_{a}label")()
             if label:
                 opts.append(f"{a}label={{{label}}}")
@@ -224,6 +240,12 @@ def save_tikz(ax, path, width=r"0.951\fwidth", height=r"\fheight", graphics_dir=
             if label is None:
                 lo.append("forget plot")
             x, y = (np.asarray(v, dtype=float) for v in line.get_data())
+            # axhline/axvline give the free coordinate as a fraction of the axes
+            tr = line.get_transform()
+            if tr == ax.get_yaxis_transform():
+                x = _axes_fraction_to_data(x, ax.get_xlim(), ax.get_xscale())
+            elif tr == ax.get_xaxis_transform():
+                y = _axes_fraction_to_data(y, ax.get_ylim(), ax.get_yscale())
             jump |= not np.all(np.isfinite(y))
             body.append(f"\\addplot[{', '.join(lo)}]\n" + _table(x, y))
             if label is not None:
@@ -234,7 +256,9 @@ def save_tikz(ax, path, width=r"0.951\fwidth", height=r"\fheight", graphics_dir=
     if title and ax.get_title():
         opts.append(f"title={{{ax.get_title()}}}")
     if legend and ax.get_legend() is not None:
-        opts.append("legend style={legend cell align=left, align=left, draw=white!15!black, font=\\footnotesize}")
+        where = "at={(0.5,-0.03)}, anchor=north, legend columns=2, " if ax.name == "polar" else ""
+        opts.append("legend style={" + where + "legend cell align=left, align=left, "
+                    "draw=white!15!black, font=\\footnotesize}")
     text = ("% This file was created by shear_flow_scattering.tikz (matlab2tikz-compatible).\n%\n"
             + colours.preamble() + "%\n\\begin{tikzpicture}\n\n\\begin{axis}[%\n"
             + ",\n".join(opts) + "\n]\n" + "".join(body) + "\\end{axis}\n\\end{tikzpicture}%\n")

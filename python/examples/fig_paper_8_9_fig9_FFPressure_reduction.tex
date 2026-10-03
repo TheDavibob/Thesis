@@ -16,7 +16,9 @@ xmax=5000,
 ymin=-40,
 ymax=20,
 xmode=log,
-xminorticks=true,
+log basis x=10,
+xtick={100,1000},
+minor xtick={200,300,400,500,600,700,800,900,2000,3000,4000,5000},
 xlabel={Frequency, f (Hz)},
 unbounded coords=jump,
 scale only axis,
@@ -160,8 +162,8 @@ table[row sep=crcr]{%
 };
 \addplot[color=black, line width=0.6pt, mark=none, forget plot]
 table[row sep=crcr]{%
-0	0\\
-1	0\\
+100	0\\
+5000	0\\
 };
 \end{axis}
 \end{tikzpicture}%

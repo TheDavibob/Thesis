@@ -339,6 +339,19 @@ the two side by side.
 * **`Zeros_Box`** returns `0` rather than `[]` for half-planes the box doesn't
   cover.
 
+## TikZ / pgfplots export
+
+The thesis and paper figures were made with matlab2tikz, run by hand after
+plotting (no `.m` file calls it; only its `.tex`/`-1.png` output is in
+`code/`). `shear_flow_scattering.tikz` writes the same style of output from
+matplotlib: `save_tikz(ax, "name.tex")`, or `save_figure_tikz(fig, stem,
+names)` for one file per panel. The figure scripts take `--tikz`. Field plots
+are rasterised to `<name>-1.png` and placed with `\addplot graphics` inside the
+axis (with a pgfplots colorbar); lines, log axes, legends and polar plots are
+vector. As with matlab2tikz, define `\fwidth` and `\fheight` before `\input`.
+`examples/tikz_preview.tex` inputs every generated figure, and it builds with
+MiKTeX pdflatex and pgfplots.
+
 ## Testing and what has been verified
 
 `uv run pytest` runs 47 tests.

@@ -17,7 +17,7 @@ axis line style={draw=none},
 ticks=none,
 scale only axis,
 title={(b) Ma = 0.2},
-legend style={legend cell align=left, align=left, draw=white!15!black, font=\footnotesize}
+legend style={at={(0.5,-0.03)}, anchor=north, legend columns=2, legend cell align=left, align=left, draw=white!15!black, font=\footnotesize}
 ]
 \addplot[area legend, draw=white!83!darkgray, fill=white, forget plot]
 table[row sep=crcr]{%
@@ -1539,13 +1539,8 @@ table[row sep=crcr]{%
 0.11203	-0.11203\\
 };
 \node at (axis cs:0.1255,-0.1255) {$315^\circ$};
-\node[anchor=south west, font=\scriptsize] at (axis cs:0.01848,0.007654) {0.02};
-\node[anchor=south west, font=\scriptsize] at (axis cs:0.03696,0.01531) {0.04};
-\node[anchor=south west, font=\scriptsize] at (axis cs:0.05543,0.02296) {0.06};
-\node[anchor=south west, font=\scriptsize] at (axis cs:0.07391,0.03061) {0.08};
-\node[anchor=south west, font=\scriptsize] at (axis cs:0.09239,0.03827) {0.1};
 \node[anchor=south west, font=\scriptsize] at (axis cs:0.1109,0.04592) {0.12};
-\node[anchor=south west, font=\scriptsize] at (axis cs:0.1293,0.05358) {0.14};
+\node[anchor=south west, font=\scriptsize] at (axis cs:0.07391,0.03061) {0.08};
 \addplot[color=mycolor1, line width=2pt, mark=none]
 table[row sep=crcr]{%
 0.00134751	2.32623e-05\\
