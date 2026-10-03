@@ -67,7 +67,14 @@ def cached(name, compute):
 def save(fig, stem, panels):
     """PNG of the whole figure plus one TikZ file per panel."""
     from shear_flow_scattering.tikz import save_tikz
-    fig.savefig(os.path.join(OUT, stem + ".png"), dpi=150)
+    for attempt in range(5):           # OneDrive occasionally holds a lock on the old file
+        try:
+            fig.savefig(os.path.join(OUT, stem + ".png"), dpi=150)
+            break
+        except OSError:
+            if attempt == 4:
+                raise
+            time.sleep(3)
     num = stem.split("_")[0]
     axes = [a for a in fig.axes if not hasattr(a, "_colorbar")]
     assert len(axes) == len(panels), (stem, len(axes))
@@ -343,55 +350,129 @@ def fig10():
 # --------------------------------------------------------------------------
 # Fig. 11 -- phase of the hard-wall dispersion function
 # --------------------------------------------------------------------------
+def _fig11_dh(K):
+    """D_h(C+) at wavenumbers K, U0 = 0.2, omega = 1, c0 = 5.
+
+    D_h via C+ is analytic except on its cut k1 = omega/U(C+(s)).  Any other path
+    from delta to 0 gives the same value as long as the critical point z_c
+    (U(z_c) = omega/k1) does not lie between it and C+.  So each k1 is evaluated
+    on its own path, chosen to stay well clear of z_c; the result is D_h(C+)
+    right up to the cut, which shows as a sharp jump rather than numerical noise.
+
+    The paths are circular arcs through 0 and delta = 1 with centre 1/2 + i c
+    (c = 0 is C+).  An arc leaves the wall at angle alpha = atan2(1/2, -c), and
+    z_c lies on the arc with c_z = (x^2 - x + y^2)/(2y).  The chosen arc is 60
+    degrees of take-off angle away from z_c's, on the same side as C+, so the
+    distance to z_c is ~0.87|z_c| even next to the wall, where all semicircles
+    and semi-ellipses meet z_c tangentially.  z_c in the lower half-plane: C+.
+    """
+    from shear_flow_scattering._utils import Path
+    from shear_flow_scattering.pridmore_brown import comp_dec_aug18a_skip
+    from shear_flow_scattering.profiles import c_const, u_parabolic
+    U, c = u_parabolic(0.2, 1, 1), c_const(5.0)
+    K = np.asarray(K).ravel()
+    with np.errstate(divide="ignore", invalid="ignore"):
+        zc = 1 - np.sqrt((1 - 1.0 / K) / 0.8 + 0j)      # root with Re z_c <= 1 (U = 1 - 0.8(1-z)^2)
+    x, y = zc.real, zc.imag
+    upper = y > 1e-12
+    cz = np.where(upper, (x ** 2 - x + y ** 2) / (2 * np.where(upper, y, 1.0)), 0.0)
+    alpha_z = np.arctan2(0.5, -cz)
+    alpha = np.where(cz < 0, np.minimum(alpha_z + np.pi / 3, np.radians(170)),   # inside: pass above
+                     np.maximum(alpha_z - np.pi / 3, np.radians(10)))           # outside: pass below
+    cp = np.where(upper, -0.5 / np.tan(alpha), 0.0)
+    want = np.clip(20.0 / np.maximum(np.abs(zc), 1e-9), 1000, 30000)
+    tiers = np.array([1000, 3000, 10000, 30000])
+    N = tiers[np.minimum(np.searchsorted(tiers, want), tiers.size - 1)]
+    D = np.full(K.size, np.nan + 0j)
+    for n in tiers:
+        sub = N == n
+        if not sub.any():
+            continue
+        m = 0.5 + 1j * cp[sub]
+        R = np.sqrt(0.25 + cp[sub] ** 2)
+        th = np.arctan2(-cp[sub], 0.5)
+        span = np.pi - 2 * th
+        arc = Path(f=lambda s_, m=m, R=R, th=th, span=span: m + R * np.exp(1j * (th + s_ * span)),
+                   df=lambda s_, R=R, th=th, span=span: 1j * span * R * np.exp(1j * (th + s_ * span)))
+        D[sub] = comp_dec_aug18a_skip(K[sub], 0.0, 1.0, U, c, 1.0, int(n), arc, prepare=False).v
+    return D
+
+
+ZOOM_11 = (4.6, 5.4, -0.4, 0.4)
+
+
 def fig11():
     def compute():
-        # D_h via C+ is analytic except on its cut k1 = omega/U(C+(s)).  Evaluate it
-        # with whichever of two other paths keeps clear of the critical point
-        # z_c (U(z_c) = omega/k1): both agree with C+ wherever z_c is not between
-        # them and C+, so the result is D_h(C+) right up to the cut, and the cut
-        # shows as a sharp jump rather than a band of numerical noise.
-        #   z_c inside the half-disc bounded by C+  -> tall semi-ellipse (height 0.85)
-        #   otherwise                               -> flat semi-ellipse (height 0.2)
-        from shear_flow_scattering.contours import semiellipse_path
-        from shear_flow_scattering.pridmore_brown import comp_dec_aug18a_skip
-        from shear_flow_scattering.profiles import c_const, u_parabolic
-        U, c = u_parabolic(0.2, 1, 1), c_const(5.0)
         kr, ki = np.linspace(-3, 6, 451), np.linspace(-1.5, 1.5, 151)
-        K = (kr[None, :] + 1j * ki[:, None]).ravel()
-        with np.errstate(divide="ignore", invalid="ignore"):
-            zc = 1 - np.sqrt((1 - 1.0 / K) / 0.8 + 0j)      # root with Re z_c <= 1 (U = 1 - 0.8(1-z)^2)
-        inside = (zc.imag > 0) & (np.abs(zc - 0.5) < 0.5)
-        # near the wall (|z_c| small) every path passes close to z_c: refine the RK steps
-        wall = np.abs(zc) < 0.15
-        D = np.empty(K.size, complex)
-        for sel, h in ((inside, 0.85), (~inside, 0.2)):
-            for sub, N in ((sel & ~wall, 1000), (sel & wall, 12000)):
-                if sub.any():
-                    D[sub] = comp_dec_aug18a_skip(K[sub], 0.0, 1.0, U, c, 1.0, N,
-                                                  semiellipse_path(1.0, 0.0, +1, h), prepare=False).v
-        return dict(kr=kr, ki=ki, D=D.reshape(ki.size, kr.size))
+        D = _fig11_dh(kr[None, :] + 1j * ki[:, None]).reshape(ki.size, kr.size)
+        a, b, lo, hi = ZOOM_11
+        zr, zi = np.linspace(a, b, 241), np.linspace(lo, hi, 241)
+        Dz = _fig11_dh(zr[None, :] + 1j * zi[:, None]).reshape(zi.size, zr.size)
+        return dict(kr=kr, ki=ki, D=D, zr=zr, zi=zi, Dz=Dz)
 
     d = cached("fig11", compute)
     import colorcet as cc
     import matplotlib.pyplot as plt
-    # only the cut's end points (k1 = omega/U_inf, omega/U0), where every path
-    # meets the critical point, remain unreliable: blank a small disc round each
-    K = d["kr"][None, :] + 1j * d["ki"][:, None]
-    near = (np.abs(K - 1.0) < 0.04) | (np.abs(K - 5.0) < 0.04)
-    ph = np.ma.masked_where(near | ~np.isfinite(d["D"]), np.angle(d["D"]))
-    fig, ax = plt.subplots(figsize=(8, 3.4), constrained_layout=True)
-    m = ax.pcolormesh(d["kr"], d["ki"], ph, shading="auto", cmap=cc.cm["CET_C6"],
-                      vmin=-np.pi, vmax=np.pi)
-    cb = fig.colorbar(m, ax=ax, pad=0.02, ticks=[-np.pi, -np.pi / 2, 0, np.pi / 2, np.pi])
-    cb.ax.set_yticklabels([r"$-\pi$", r"$-\pi/2$", "0", r"$\pi/2$", r"$\pi$"])
-    cb.set_label(r"arg $D_h$")
-    with np.errstate(divide="ignore"):
-        logD = np.log10(np.abs(d["D"]))
-    lv = np.arange(np.floor(np.nanpercentile(logD, 2)), np.ceil(np.nanpercentile(logD, 98)) + 1)
-    ax.contour(d["kr"], d["ki"], np.ma.masked_where(np.ma.getmaskarray(ph), logD), levels=lv, colors="0.25", linewidths=0.5)
-    ax.set(xlabel=r"Re $k_1$", ylabel=r"Im $k_1$", aspect="equal",
-           title=r"$D_h = v_d(0)$ via $C^+$, $U_0 = 0.2U_\infty$, $\omega = 1$ (contours: $\log_{10}|D_h|$)")
-    save(fig, "fig11_dispersion_function_phase", ["dispersion_function_phase"])
+    from matplotlib.patches import Rectangle
+    from shear_flow_scattering.profiles import u_parabolic
+
+    t = np.linspace(0, 1, 4001)                                        # the deformed critical layer
+    gamma = 1.0 / u_parabolic(0.2, 1, 1).f(0.5 + 0.5 * np.exp(1j * np.pi * (1 - t)))
+
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.colors import Normalize
+    cmap, norm = cc.cm["CET_C6"], Normalize(-np.pi, np.pi)
+    def shaded(D, mode):
+        """Phase as hue (CET-C6, near-constant lightness) with brightness from log10|D|,
+        scaled to the panel's own range of |D|:
+        "smooth" -- darker towards zeros, lighter towards large |D|;
+        "banded" -- a sawtooth with ~10 bands across the panel (edges are iso-|D| lines;
+                    half decades in the full view)."""
+        with np.errstate(divide="ignore", invalid="ignore"):
+            L = np.log10(np.abs(D))
+        lo, mid, hi = np.nanpercentile(L, [15, 50, 85])
+        rgba = cmap(norm(np.angle(D)))
+        if mode == "smooth":
+            v = 0.2 + 0.8 / (1 + np.exp(-(L - mid) / (0.5 * (hi - lo))))
+        else:
+            span = np.subtract(*np.nanpercentile(L, [98, 2]))
+            width = 0.5 if span > 3 else 10 ** np.floor(np.log10(span / 10)) * 2   # band width in decades
+            v = 0.62 + 0.38 * np.mod(L / width, 1.0)
+        rgba[..., :3] *= np.nan_to_num(v, nan=1.0)[..., None]
+        return rgba
+
+    def panel(ax, kr, ki, D, endpoint_r, title, mode):
+        K = kr[None, :] + 1j * ki[:, None]
+        bad = (np.abs(K - 1.0) < endpoint_r) | (np.abs(K - 5.0) < endpoint_r) | ~np.isfinite(D)  # cut end points
+        rgba = shaded(D, mode)
+        rgba[bad] = (1, 1, 1, 0)
+        dx, dy = (kr[1] - kr[0]) / 2, (ki[1] - ki[0]) / 2
+        im = ax.imshow(rgba, origin="lower", extent=(kr[0] - dx, kr[-1] + dx, ki[0] - dy, ki[-1] + dy),
+                       interpolation="nearest")
+        im.set_cmap(cmap); im.set_norm(norm)      # so the TikZ colour bar carries the phase map
+        ax.plot(gamma.real, gamma.imag, "k--", lw=1.0, label=r"$k_1 = \omega/U(C^+(s))$")
+        ax.set(xlim=(kr[0], kr[-1]), ylim=(ki[0], ki[-1]), xlabel=r"Re $k_1$", ylabel=r"Im $k_1$",
+               aspect="equal", title=title)
+        return im
+
+    for mode, stem, blabel in (("smooth", "fig11_dispersion_function_phase",
+                                "brightness: $\log_{10}|D_h|$"),
+                               ("banded", "fig11alt_dispersion_function_phase_banded",
+                                "brightness bands: equal steps in $\log_{10}|D_h|$")):
+        fig, (a, b) = plt.subplots(1, 2, figsize=(12, 3.8), constrained_layout=True,
+                                   gridspec_kw=dict(width_ratios=[2.6, 1]))
+        im = panel(a, d["kr"], d["ki"], d["D"], 0.04,
+                   r"(a) $D_h = v_d(0)$ via $C^+$, $U_0 = 0.2U_\infty$, $\omega = 1$", mode)
+        x0, x1, y0, y1 = ZOOM_11
+        a.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, ec="k", lw=0.8))
+        a.legend(loc="upper left", fontsize=8)
+        panel(b, d["zr"], d["zi"], d["Dz"], 0.004, r"(b) near $k_1 = \omega/U_0$", mode)
+        cb = fig.colorbar(ScalarMappable(norm, cmap), ax=[a, b], pad=0.01,
+                          ticks=[-np.pi, -np.pi / 2, 0, np.pi / 2, np.pi])
+        cb.ax.set_yticklabels([r"$-\pi$", r"$-\pi/2$", "0", r"$\pi/2$", r"$\pi$"])
+        cb.set_label(r"arg $D_h$ (" + blabel + ")")
+        im.colorbar = cb
+        save(fig, stem, ["dispersion_function_phase", "near_wall_critical_point"])
 
 
 # --------------------------------------------------------------------------
