@@ -354,27 +354,31 @@ MiKTeX pdflatex and pgfplots.
 
 ## Testing and what has been verified
 
-`uv run pytest` runs 47 tests.
+```
+uv run pytest              # fast tests only (~15 s); slow ones are skipped
+uv run pytest --runslow    # everything (~15 min)
+uv run pytest --runslow -m slow   # only the slow tests
+```
 
-* **Known answers for the numerics** (`tests/test_core.py`):
-  * Gauss rules and adaptive integration.
-  * Branch-cut functions.
-  * RK4 against the damped oscillator.
-  * Profile derivatives against finite differences.
-  * `gamma^2` against the dispersion relation.
-  * **Uniform flow:** Pridmore-Brown reduces to `phi'' = gamma^2 phi`, so the
-    decaying solution must be exactly `exp(-gamma x2)`, along straight and
-    semicircular paths.
-  * Path independence away from the critical layer.
-  * The GridX bug fix.
-  * Additive and multiplicative Wiener-Hopf splits of functions with known
-    factors, including the analytic continuation.
-  * **The actual hard→soft kernel:** `K+ K- = K` between separated contours,
-    to about `1e-6` with slip and `1e-5` without (limited by `N_bl`).
-  * Zero finding, Frobenius vs `J0`, vectorised vs row-by-row `Y`, and
-    continuity of the Green's function at the source.
-* **Every script runs end to end** at low resolution and gives finite fields
-  of the right shape (`tests/test_scripts_smoke.py`).
+Tests taking more than a few seconds (full-pipeline runs, high-resolution
+reference integrations) are marked `@pytest.mark.slow`. Modules follow the
+package, and tests are grouped into one class per unit under test:
+
+| Module | What it checks |
+|---|---|
+| `test_numerics.py` | Gauss rules, adaptive integration, branch cuts, PCHIP, RK4 (damped oscillator) |
+| `test_profiles.py` | profile derivatives vs finite differences, edge values, analytic fits |
+| `test_contours.py` | semicircle paths, critical-layer ellipse |
+| `test_pridmore_brown.py` | uniform-flow exact solution, path independence, real vs complex solvers, hard-wall IC, indented paths, spurious critical points and the safe ellipse |
+| `test_factorisation.py` | known additive/multiplicative splits, `K+ K- = K` for the hard→soft kernel, wake-kernel winding and contour independence |
+| `test_zeros_frobenius.py` | Newton, argument principle, recursive and box zero finders; Frobenius vs `J0` and integer-separated roots |
+| `test_inversion.py` | inversion sum, vectorised `Y`, Green's-function continuity, the regularised Green's function (causal limit, resolution independence, conjugate branch) |
+| `test_distributed.py` | thesis vs Jacobian weighting |
+| `test_tikz.py` | matlab2tikz-style export |
+| `test_scripts_*.py` | every driver script end to end at low resolution; far field vs direct near-field inversion |
+| `test_trailing_edge_physics.py` | boundary conditions and Kutta condition of the near field; uniform-flow kernel factors and far-field directivity against closed forms; agreement of the two far-field representations; critical-angle cusp; far vs near field for asymmetric flow, above and below the plate |
+
+Known failures are marked `xfail(strict=True)` with the reason, so they show as `x` until fixed (and as an error if they start passing without the marker being removed).
 
 **Not verified:** there are no MATLAB reference outputs in the repository, so
 nothing has been compared number-for-number against the original, and the
